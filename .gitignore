@@ -50,3 +50,6 @@ src-tauri/tauri.mas.conf.json
 OneKeePass*.pkg
 
 __pycache__/
+
+# Local portable build outputs; never commit binaries or user data.
+/dist/
