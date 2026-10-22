@@ -142,7 +142,7 @@ try {
     "$Hash  $Name.zip" | Set-Content -Path "$Zip.sha256" -Encoding ASCII
     Write-Host "Portable archive: $Zip"
     Write-Host "SHA256: $Hash"
-    Write-Host "Native Windows build and runtime launch must still be tested on a Windows host."
+    Write-Host "Portable package created. Test application launch and KDBX operations before using real secrets."
 }
 finally {
     Pop-Location
