@@ -78,9 +78,15 @@ try {
         Join-Path $SidecarDirectory "onekeepass-proxy-$Target.exe"
     ) -Force
 
+    Write-Host "==> Validating the desktop Cargo.lock and fetching pinned dependencies"
+    Invoke-Checked "cargo.exe" @(
+        "fetch", "--locked", "--manifest-path", (Join-Path $Root "src-tauri/Cargo.toml"),
+        "--target", $Target
+    )
+
     Write-Host "==> Building unbundled Tauri Windows executable"
     Invoke-Checked "yarn.cmd" @(
-        "tauri", "build", "--no-bundle", "--target", $Target, "--", "--locked"
+        "tauri", "build", "--no-bundle", "--target", $Target
     )
 
     $Exe = Join-Path $Root "src-tauri/target/$Target/release/OneKeePass.exe"
