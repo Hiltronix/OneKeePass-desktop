@@ -1,0 +1,93 @@
+name: Hiltronix controlled Rust lockfile remediation
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/hiltronix-lockfile-remediation.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: hiltronix-rust-remediation
+  cancel-in-progress: false
+
+jobs:
+  update-locked-security-patches:
+    name: Resolve audited Rust patch upgrades
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Check out exact source commit
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Configure Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Update narrow Rust dependency patches
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p security-reports
+          : > security-reports/LOCKFILE-UPDATE.txt
+
+          # Cargo alone resolves semver, checks registry hashes and rewrites
+          # the dependency closure correctly. On incompatibility, keep the
+          # previous lockfile and report the failed patch instead of forcing it.
+          upgrade() {
+            local name="$1" version="$2"
+            cp src-tauri/Cargo.lock /tmp/hiltronix-cargo-lock-backup
+            echo "Trying ${name} => ${version}"
+            if cargo update --manifest-path src-tauri/Cargo.toml \
+                 --package "$name" --precise "$version"; then
+              echo "OK: ${name} => ${version}" | tee -a security-reports/LOCKFILE-UPDATE.txt
+            else
+              cp /tmp/hiltronix-cargo-lock-backup src-tauri/Cargo.lock
+              echo "SKIPPED (resolution failed): ${name} => ${version}" | tee -a security-reports/LOCKFILE-UPDATE.txt
+            fi
+          }
+
+          # Changes are restricted to patch versions within existing release
+          # lines. No RSA algorithm substitution, key handling, or core change.
+          upgrade ctutils 0.4.4
+          upgrade rustls 0.23.46
+          upgrade rustls-webpki 0.103.16
+          upgrade quinn-proto 0.11.18
+          upgrade webpki-roots 1.0.10
+          upgrade webpki-root-certs 1.0.10
+
+          # Cargo must now accept the lockfile with --locked; otherwise fail.
+          cargo metadata --manifest-path src-tauri/Cargo.toml \
+            --locked --format-version 1 > /dev/null
+          git diff --check
+          git diff --stat
+          cat security-reports/LOCKFILE-UPDATE.txt
+
+      - name: Commit validated lockfile to main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src-tauri/Cargo.lock
+          if git diff --cached --quiet; then
+            echo "Cargo lockfile already contained all compatible updates"
+            exit 0
+          fi
+          git commit -m "Remediate compatible Rust crypto, TLS and QUIC lockfile patches"
+          # Fast-forward only. If main changed while resolving, fail closed;
+          # a human review must reconcile the new upstream commits.
+          git push origin HEAD:main
+
+      - name: Publish patch-resolution outcomes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Hiltronix-Rust-Remediation-${{ github.run_number }}
+          path: security-reports/
+          if-no-files-found: warn
+          retention-days: 30

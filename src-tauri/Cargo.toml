@@ -67,7 +67,7 @@ tauri-plugin-dialog = "2"
 
 open = "5"
 
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+# No direct reqwest dependency: the legacy updater module is not linked.
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

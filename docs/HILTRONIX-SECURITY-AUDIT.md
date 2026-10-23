@@ -95,3 +95,9 @@ Keep the original OneKeePass developers credited; retain Hiltronix attribution,
 custom templates, KDBX compatibility, local icon import and SSH Agent Service.
 Do not claim the resulting binary is fully offline/network-isolated until
 the Windows runtime and dependency audit tasks above are completed.
+
+## Controlled Rust remediation in progress
+
+The Windows-only portable build now excludes compiling the disabled browser proxy and uses `tauri.windows-offline.conf.json` to clear the Tauri `externalBin` sidecar. The direct desktop `reqwest 0.12` dependency (left over from the unlinked updater) was removed from the manifest. A one-shot GitHub Actions resolver (`hiltronix-lockfile-remediation.yml`) regenerates `src-tauri/Cargo.lock` using Cargo and attempts compatible patched versions of `ctutils`, `rustls`, `rustls-webpki`, `quinn-proto`, `webpki-roots`, and `webpki-root-certs`. It reports and skips any package whose constraints reject the requested version; a green resolver run is **not** a substitute for a succeeding Windows build and a new advisory scan.
+
+No forced RSA major-version change is attempted: RustSec RUSTSEC-2023-0071 lists no patched version, and altering SSH signing could break authentication. Older `quick-xml` release lines remain an explicit separate issue pending analysis of pinned upstream/core dependency constraints. Runtime network isolation remains unverified.
