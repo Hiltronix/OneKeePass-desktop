@@ -2,4 +2,4 @@
 
 ;; Source revision identifier: increment the final number on subsequent reviewed revisions that day.
 ;; A rebuild of the same commit retains its revision.
-(def revision "2026-10-23-2")
+(def revision "2026-10-23-3")
