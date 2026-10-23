@@ -508,7 +508,7 @@
     [mui-dialog {:open (boolean dialog-show)
                  :on-close (fn [_event reason]
                              (when (= reason "escapeKeyDown")
-                               (app-settings-events/app-settings-dialog-close)))
+                               (app-settings-events/browser-reconnect-confirm-dialog-close)))
                  :on-click #(.stopPropagation ^js/Event %)}
      [mui-dialog-title "Reconnect browser extension"]
      [mui-dialog-content {:dividers true :style {:min-height "120px"}}
