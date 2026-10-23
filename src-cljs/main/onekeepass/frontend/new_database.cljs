@@ -60,7 +60,7 @@
                   {:checked (boolean save-remote?)
                    :on-change (fn [^js/CheckedEvent e]
                                 (nd-events/save-remote-toggle (-> e .-target .-checked)))}])
-       :label (t/lstr-l "saveRemote")}]])]])
+       :label (t/lstr-l "saveRemote")}])]])
 
 
 
