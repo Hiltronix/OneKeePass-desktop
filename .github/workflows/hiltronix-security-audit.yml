@@ -41,6 +41,7 @@ jobs:
       - name: Scan Cargo lockfiles and JavaScript dependencies
         shell: bash
         run: |
+          set +e
           set -uo pipefail
           mkdir -p security-reports
 
@@ -71,6 +72,32 @@ jobs:
             echo 'This is an advisory scan, not an audit of code behavior or runtime traffic.'
           } > security-reports/SUMMARY.md
           cat security-reports/SUMMARY.md
+
+          echo
+          echo '--- RustSec desktop summary ---'
+          if command -v jq >/dev/null && test -s security-reports/cargo-desktop.json; then
+            jq -r '.vulnerabilities.list[]? | "\\(.advisory.id) | \\(.package.name) \\(.package.version) | \\(.advisory.title)"' security-reports/cargo-desktop.json | head -100
+            jq -r '.warnings | to_entries[]? | "\\(.key): \\(.value | length) entries"' security-reports/cargo-desktop.json | head -30
+          fi
+          sed -n '1,25p' security-reports/cargo-desktop.stderr
+
+          echo
+          echo '--- RustSec sidecar summary ---'
+          if command -v jq >/dev/null && test -s security-reports/cargo-sidecar.json; then
+            jq -r '.vulnerabilities.list[]? | "\\(.advisory.id) | \\(.package.name) \\(.package.version) | \\(.advisory.title)"' security-reports/cargo-sidecar.json | head -100
+          fi
+          sed -n '1,25p' security-reports/cargo-sidecar.stderr
+
+          echo
+          echo '--- Yarn advisory summary ---'
+          if command -v jq >/dev/null && test -s security-reports/yarn-audit.jsonl; then
+            jq -r 'select(.type == "auditAdvisory") | .data.advisory | "\\(.id) | \\(.module_name) | \\(.severity) | \\(.title)"' security-reports/yarn-audit.jsonl | head -100
+            jq -r 'select(.type == "auditSummary") | .data' security-reports/yarn-audit.jsonl | head -30
+          fi
+          sed -n '1,25p' security-reports/yarn-audit.stderr
+
+          # Advisory findings must not abort the scan before its reports are archived.
+          exit 0
 
       - name: Upload advisory reports
         if: always()
