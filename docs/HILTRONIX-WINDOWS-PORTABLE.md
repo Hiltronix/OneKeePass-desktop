@@ -69,3 +69,27 @@ To download the build without installing development tools locally:
 5. Run `OneKeePass.exe` and test with a disposable KDBX database. Keep the hidden `.portable` marker beside the EXE to enable portable data storage.
 
 The Windows portable build is **not** yet security-hardened against unwanted network access. The ZIP retains the current application's optional features and updater until they are separately audited and modified.
+
+## Hiltronix desktop usability changes (source revision in progress)
+
+- **Window geometry:** Windows position, normal size and maximized state are stored in the existing `preference.toml`; portable builds keep this in `onekeepass-data`. If the saved monitor is disconnected, the app uses the normal centered startup location.
+- **Help/About:** The Windows About item is under Help. The About panel identifies Hiltronix as the fork maintainer and links both to the Hiltronix repository and the original OneKeePass desktop developers.
+- **Updates:** The three-second automatic update check and native update-check command are removed. Help → Check for Updates opens a local dialog reading **"Not currently in use."**
+- **Custom icons:** Entry and group custom-icon pickers no longer offer a URL download. The Rust command for Internet favicon downloads is unregistered and removed; selecting local image files remains available.
+- **Dialogs:** Escape invokes the existing Cancel/Close callback for database settings, application settings, Manage Custom Icons, and Search. The nested browser reconnect prompt has its own Escape callback.
+- **Tooltips:** Toolbar buttons are wrapped to support disabled-button tooltips, and hover delay is reduced from 2000 ms to 700 ms.
+
+**Not a network-isolation guarantee:** The broader audit of SFTP/WebDAV, browser integration, any remaining network-capable commands, plugins, and third-party dependencies remains outstanding. These changes do not make a defensible claim that the Windows executable is unable to communicate over the network.
+
+### Acceptance test checklist
+
+With a disposable database, verify all of these on Windows 10:
+
+1. Resize and move the main window, exit normally, and launch again. Check position/size; repeat after maximizing. Disconnect a secondary display (if applicable) and verify the window remains visible.
+2. Select **Help → Check for Updates** and confirm the exact offline message, without an HTTP request.
+3. Select **Help → About OneKeePass**. Verify both original authors' GitHub link and the Hiltronix fork link open correctly.
+4. Open database settings, application settings, Manage Custom Icons, and Search; press Escape. Verify the same outcome as the dialog's Cancel/Close button, including discarding edits.
+5. Hover both enabled and disabled toolbar buttons to check consistent tooltip appearance at approximately 700 ms.
+6. Open entry and group icon dialogs: verify **Add from File** works and **Add from URL** is absent. Existing icons embedded in KDBX databases must still render.
+7. Exercise opening, editing and saving KDBX4 files, and custom templates, using test data only.
+
