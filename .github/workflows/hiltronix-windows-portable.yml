@@ -18,6 +18,11 @@ on:
 permissions:
   contents: read
 
+# Only keep the latest build while source edits are being committed.
+concurrency:
+  group: hiltronix-windows-portable-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   portable-x64:
     name: Build Windows portable edition
