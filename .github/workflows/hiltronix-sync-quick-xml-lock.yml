@@ -1,0 +1,42 @@
+name: Validate patched core Cargo.lock
+
+on:
+  push:
+    branches: [security/quick-xml-0.41-desktop]
+    paths:
+      - '.github/workflows/hiltronix-sync-quick-xml-lock.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync-lockfile:
+    name: Resolve tested core Git dependency
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - name: Check out desktop validation branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Configure Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Resolve core Git revision without updating unrelated dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo update --manifest-path src-tauri/Cargo.toml --package onekeepass-core
+          cargo metadata --manifest-path src-tauri/Cargo.toml --locked --format-version 1 > /dev/null
+          git diff --check
+          git diff --stat
+      - name: Commit resolved lockfile on validation branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src-tauri/Cargo.lock
+          test ! -z "$(git diff --cached --name-only)" || { echo 'No lock change needed'; exit 0; }
+          git commit -m "Pin tested quick-xml core Git revision in desktop Cargo.lock"
+          git push origin HEAD:security/quick-xml-0.41-desktop

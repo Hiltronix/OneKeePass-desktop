@@ -3,7 +3,7 @@ name: Hiltronix dependency security audit
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, security/quick-xml-0.41-desktop]
     paths:
       - '.github/workflows/hiltronix-security-audit.yml'
       - 'src-tauri/Cargo.lock'
