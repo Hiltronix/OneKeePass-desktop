@@ -1,6 +1,6 @@
 # Hiltronix OneKeePass security audit (Windows desktop)
 
-Audit date: 2026-10-23. Source revision: `2026-10-23-5` (desktop v0.27.0).
+Audit date: 2026-10-23. Source revision: `2026-10-23-8` (desktop v0.27.0).
 Scope: Hiltronix Windows x64 portable desktop edition plus the pinned
 Hiltronix `onekeepass-core` source at `1e57070fe7ca0c7d3ae4fb6fe38cc9ebbca95da5`.
 Android is **not** covered by this Windows-only audit.
@@ -23,7 +23,7 @@ penetration test, dependency CVE scan, or formal proof of non-connectivity.
 | W-03 | Medium | SSH Agent **Client Mode** previously ignored the per-key `Require Confirmation` flag when loading a key into an external agent | **Fixed**: such keys are rejected in Client Mode; Agent Mode preserves confirmation prompts and 60-second fail-closed timeout. SSH Agent Service itself remains available and disabled by default |
 | W-04 | Medium | `onekeepass-core` feature `favicon` enables HTTP downloading as well as local image decoding. The desktop requests this feature to normalize a **local icon file** | **Unresolved / not reachable via registered Tauri command**: remove by separating local icon conversion from download capability in a subsequent core/lockfile migration; do not remove local icon import |
 | W-05 | Medium | The desktop still depends on network-related packages, including SFTP/WebDAV in the shared core and `reqwest` required by the old update module | **No direct Windows path found** to network transports from registered commands. Remote-storage read/write/metadata and connect/list entry points are Windows-guarded; updater module is not registered or imported by `main.rs`. Dependency removal remains outstanding |
-| W-06 | Medium | Dependency and toolchain versions are lockfile-based but not fully reproducible; no vulnerability scan or third-party advisory review has been executed | **Outstanding**: run RustSec `cargo audit`, JavaScript dependency audit, binary/SBOM inventory, and review advisories before release |
+| W-06 | Medium | Dependency and toolchain versions are lockfile-based but not fully reproducible | **Partially remediated**: RustSec and Yarn scans executed; many compatible patches and unused-dependency removals landed. Outstanding advisories, locked-toolchain verification, binary/SBOM inventory and dependency provenance review remain |
 | W-07 | Medium | No Windows packet-level baseline has been established, including offline startup, unlocking, editing, URL opening, SSH Agent disabled/enabled, and browser manifest leftovers | **Outstanding**: perform firewall/WFP or packet-capture testing on a Windows test machine and check process tree/child processes |
 | W-08 | Low | Windows portable builds previously compiled the disabled browser proxy unnecessarily | **Remediated in source**: Windows-specific Tauri config clears `bundle.externalBin` and its packaging script no longer compiles the proxy. Other platforms retain their original sidecar; verify with the next Windows build |
 | W-09 | Low | Windows log files and temporary decrypted attachments are local resources and should be checked for secret leakage, retention, and ACLs | **Outstanding**: inspect file permissions and lifecycle with disposable data; never upload real passwords or logs containing secrets |
@@ -69,6 +69,16 @@ The Yarn scan covers development/build dependencies as well as application packa
 - **Tauri permissions:** `shell:allow-open` is intentionally retained for entry URL opening. `shell:default` and `process:default` should be minimized after validating which concrete operations the installed plugins expose. CSP restrictions cover the WebView, not privileged Rust code.
 - **Sensitive local data:** user-verified KDBX read/write and desktop-mobile synchronization are functional. This does not verify the permissions or secure deletion of temporary attachment files, log files, copied passwords and backups.
 - **Boundary:** static review and advisory scanning do not prove no outbound network traffic. Windows WFP/firewall process tracing with SSH Agent on/off and external browser URL opening remains a release-blocking verification step for any claim of complete isolation.
+
+### Remediation batch results (2026-10-23)
+
+Source commits removed the disabled browser proxy from the Windows build pipeline and obsolete desktop `reqwest 0.12`; Cargo regenerated the locked Rust dependency closure. Security patch versions are `ctutils 0.4.4`, `quinn-proto 0.11.18`, `rustls 0.23.46`, `rustls-webpki 0.103.16`, `webpki-roots 1.0.10`, and `webpki-root-certs 1.0.10`.
+
+The production frontend uses `shadow-cljs` rather than webpack. The unused `webpack` and `webpack-cli` build dependencies and their JavaScript transitive closure have been removed. Remaining `ws` and `yaml` dependencies are locked to patched compatible releases `8.21.3` and `1.10.3`, respectively.
+
+**Remaining risk and follow-up:** The pinned shared core still brings `quick-xml 0.37.5`; Linux Wayland tooling brings `quick-xml 0.39.4`. Both are below the fixes in `quick-xml 0.41.0`; a direct update is incompatible with those parents' version constraints. The RSA timing advisory `RUSTSEC-2023-0071` reports **no patched RSA crate versions**. These are not resolved by the patch batch and require source-level reachability/mitigation analysis or controlled upstream changes. Do not swap cryptographic implementations blindly.
+
+The earlier advisory scan totals describe the **pre-remediation** dependency inventory. Fresh RustSec and Yarn scans and a Windows build on the final lockfiles are mandatory before accepting the updated build. SSH Agent Service and user-triggered URL opening remain functional features that must be preserved.
 
 ## Acceptance work (must be performed separately)
 

@@ -56,6 +56,19 @@ jobs:
           yarn audit --json             > security-reports/yarn-audit.jsonl 2> security-reports/yarn-audit.stderr
           yarn_exit=$?
 
+          # This workflow archives findings instead of failing before report
+          # upload. Surface prominent warnings so a green job is not confused
+          # with a clean security bill of health.
+          if (( desktop_exit != 0 )); then
+            echo "::warning title=Desktop Rust advisories::cargo audit exit ${desktop_exit}; inspect report artifacts."
+          fi
+          if (( sidecar_exit != 0 )); then
+            echo "::warning title=Legacy browser-proxy advisories::cargo audit exit ${sidecar_exit}; this proxy is not built or packaged on Windows."
+          fi
+          if (( yarn_exit != 0 )); then
+            echo "::warning title=JavaScript dependency advisories::yarn audit exit ${yarn_exit}; inspect report artifacts."
+          fi
+
           {
             echo '# Security dependency audit'
             echo
