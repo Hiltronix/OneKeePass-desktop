@@ -66,19 +66,6 @@
                                 svg-icon])]
                 ;; Custom icons panel
                 [mui-stack {:spacing 2}
-                 [mui-stack {:direction "row" :spacing 1}
-                  [mui-text-field {:size "small" :label (t/lstr-l 'addFromUrl)
-                                   :value @url-input
-                                   :sx {:flex-grow 1}
-                                   :slotProps {:htmlInput m/auto-capitalize-off-props}
-                                   :on-change #(reset! url-input (-> % .-target .-value))}]
-                  [mui-button {:color "primary"
-                               :disabled (str/blank? @url-input)
-                               :on-click #(do (ci-events/add-icon-from-url
-                                               @url-input
-                                               [:group-form/set-custom-icon-uuid])
-                                              (close-icons-dialog))}
-                   (t/lstr-bl 'add)]]
                  [mui-button {:variant "outlined"
                               :on-click #(do (ci-events/add-icon-from-file
                                               [:group-form/set-custom-icon-uuid])
