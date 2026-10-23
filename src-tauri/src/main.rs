@@ -27,6 +27,8 @@ mod sandbox;
 mod ssh_agent;
 mod translation;
 mod window_behavior;
+#[cfg(target_os = "windows")]
+mod window_geometry;
 // mod callback_service_provider;
 
 use constants::event_action_names::*;
@@ -95,6 +97,8 @@ fn main() {
         .manage(app_state::AppState::new())
         .setup(|app| {
             app_state::init_app(app);
+            #[cfg(target_os = "windows")]
+            window_geometry::restore(app.app_handle());
             // Lock (encrypt in RAM) all open databases when the OS is about to
             // sleep, before the memory image can hit a hibernation file.
             power_monitor::start(app.app_handle());
@@ -274,7 +278,20 @@ fn main() {
             info!("Application is ready");
         }
 
+        #[cfg(target_os = "windows")]
+        tauri::RunEvent::ExitRequested { .. } => {
+            window_geometry::save(app_handle);
+        }
+
         tauri::RunEvent::WindowEvent { label, event, .. } => {
+            #[cfg(target_os = "windows")]
+            if label == "main"
+                && matches!(&event, tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_))
+            {
+                if let Some(window) = app_handle.get_webview_window("main") {
+                    window_geometry::capture(&window);
+                }
+            }
             match event {
                 tauri::WindowEvent::Focused(focused) => {
                     let app_handle = app_handle.clone();
@@ -286,6 +303,10 @@ fn main() {
                     let _r = window.emit(MAIN_WINDOW_EVENT, wr);
                 }
                 tauri::WindowEvent::CloseRequested { api, .. } => {
+                    #[cfg(target_os = "windows")]
+                    if label == "main" {
+                        window_geometry::save(app_handle);
+                    }
                     info!(
                         "Window event is CloseRequested and will not be closed for window {}",
                         label
