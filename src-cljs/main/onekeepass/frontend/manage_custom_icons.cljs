@@ -56,6 +56,9 @@
   (let [open? @(ci-events/manage-dialog-open?)
         icons @(ci-events/icons-list)]
     [mui-dialog {:open (boolean open?)
+                 :on-close (fn [_event reason]
+                             (when (= reason "escapeKeyDown")
+                               (ci-events/close-manage-dialog)))
                  :on-click #(.stopPropagation ^js/Event %)
                  :sx {"& .MuiDialog-paper" {:width "80%" :max-width "600px"}}}
      [mui-dialog-title (lstr-dlg-title 'manageCustomIcons)]
