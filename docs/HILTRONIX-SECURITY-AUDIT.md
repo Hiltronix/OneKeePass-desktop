@@ -47,6 +47,29 @@ penetration test, dependency CVE scan, or formal proof of non-connectivity.
   Actions *build success* cannot establish runtime security or a passing
   unit-test suite.
 
+## Dependency scan results: 2026-10-23
+
+GitHub Actions dependency scan [#39962965134](https://github.com/Hiltronix/OneKeePass-desktop/actions/runs/39962965134) completed and archived its reports. **The green workflow result does not mean the dependency inventory passed.** The scan deliberately continues after vulnerability findings.
+
+| Inventory | Scanner exit | Findings |
+|---|---:|---|
+| Desktop Rust Cargo.lock | 1 | 19 advisory/package records (including duplicate advisory IDs for multiple versions), plus 5 unmaintained, 2 unsound and 2 yanked warnings |
+| Browser-proxy Rust Cargo.lock | 1 | `RUSTSEC-2026-0007` in `bytes 1.10.1`; proxy is excluded from the portable archive but currently built |
+| JavaScript Yarn dependencies | 14 | Multiple high/moderate advisories, including `serialize-javascript`, `fast-uri`, `ws`, `yaml` and `ajv` |
+
+Important desktop Rust findings include `RUSTSEC-2023-0071` (`rsa` timing attack), `RUSTSEC-2026-0385` (`ctutils` nonconstant-time operations), `RUSTSEC-2026-0194/0195` (`quick-xml` denial of service), advisories affecting `quinn-proto`, and `rustls` / WebPKI trust and handshake issues. **Presence in a lockfile does not establish that a vulnerable execution path is reachable in this Windows build.** Determine which packages are included in the actual executable, their enabled features, whether affected APIs are called, and the patched versions before selecting upgrades.
+
+The Yarn scan covers development/build dependencies as well as application packages; identify production exposure separately. Do not reflexively update all locked versions in a password manager without KDBX compatibility and signing regression tests.
+
+**Next remediation gate:** prioritize cryptography, certificate validation, parsers consuming untrusted files, and signing/SSH-agent dependencies; upgrade or remove vulnerable dependencies in controlled groups; rebuild, retest and rescan. The scan findings remain **open** as of this audit.
+
+### Additional code review notes
+
+- **SSH Agent retained:** Agent Mode's Windows named pipe / Pageant transports are local IPC, but same-user applications can ask for signatures from available keys. Do not equate local IPC with zero risk. Client Mode exports keys into an external agent; confirmation-only keys are now rejected in that mode.
+- **Tauri permissions:** `shell:allow-open` is intentionally retained for entry URL opening. `shell:default` and `process:default` should be minimized after validating which concrete operations the installed plugins expose. CSP restrictions cover the WebView, not privileged Rust code.
+- **Sensitive local data:** user-verified KDBX read/write and desktop-mobile synchronization are functional. This does not verify the permissions or secure deletion of temporary attachment files, log files, copied passwords and backups.
+- **Boundary:** static review and advisory scanning do not prove no outbound network traffic. Windows WFP/firewall process tracing with SSH Agent on/off and external browser URL opening remains a release-blocking verification step for any claim of complete isolation.
+
 ## Acceptance work (must be performed separately)
 
 1. With a disposable KDBX, test open/unlock/edit/save/reopen, templates,
