@@ -2,6 +2,7 @@
   (:require
    [clojure.string :as str]
    [onekeepass.frontend.events.about]
+   [onekeepass.frontend.build-revision :as build-revision]
    [onekeepass.frontend.events.common :as cmn-events]
    [onekeepass.frontend.events.generic-dialogs :as gd-events] ;; This is required to ensure that events of about are registred
    [onekeepass.frontend.mui-components :as m :refer [mui-button mui-dialog
@@ -31,6 +32,9 @@
          [mui-stack {:direction "row" :spacing 1 :alignItems "center"}
           [mui-typography {:variant "subtitle2" :sx {:min-width "120px"}} (tr-l "version")]
           [mui-typography {:variant "body2"} (or app-version "")]]
+         [mui-stack {:direction "row" :spacing 1 :alignItems "center"}
+          [mui-typography {:variant "subtitle2" :sx {:min-width "120px"}} "Revision"]
+          [mui-typography {:variant "body2"} build-revision/revision]]
          [mui-stack {:direction "row" :spacing 1 :alignItems "center"}
           [mui-typography {:variant "subtitle2" :sx {:min-width "120px"}} (tr-l "platform")]
           [mui-typography {:variant "body2"} (str (str/capitalize os-name) " " os-version)]]

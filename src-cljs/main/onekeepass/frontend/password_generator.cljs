@@ -316,8 +316,11 @@
 
 (defn password-generator-dialog
   [{:keys [dialog-show panel-shown] :as pass-options}]
-  [mui-dialog {:open dialog-show 
+  [mui-dialog {:open dialog-show
                :dir (t/dir)
+               :on-close (fn [_event reason]
+                           (when (= reason "escapeKeyDown")
+                             (gen-events/generator-dialog-data-update :dialog-show false)))
                :on-click #(.stopPropagation ^js/Event %)
                ;; This will set the Paper width in all child components 
                ;; and is equivalent to :classes {:paper "pwd-dlg-root"}
