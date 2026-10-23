@@ -55,3 +55,17 @@ The `.portable` marker is important: existing Rust code detects it and saves app
 ## Scope of later security work
 
 The current desktop source still contains an online update-checking command and optional networking/browser features. These will be separately audited and restricted after this build baseline is tested. Building a portable ZIP does not itself block Internet connectivity.
+
+## GitHub Actions: downloadable Windows ZIP
+
+The workflow [Hiltronix Windows x64 portable ZIP](../.github/workflows/hiltronix-windows-portable.yml) executes the packaging script on a GitHub-hosted Windows 2022 runner with Visual Studio/MSVC, Java, Node, Yarn and Rust.
+
+To download the build without installing development tools locally:
+
+1. Open the [Windows Actions runs](https://github.com/Hiltronix/OneKeePass-desktop/actions/workflows/hiltronix-windows-portable.yml).
+2. Open a **successful** run (green checkmark). If the workflow failed, inspect its log rather than using an incomplete artifact.
+3. Under **Artifacts**, download the \`Hiltronix-Windows-x64-Portable-...\` ZIP.
+4. Extract that Actions artifact and then extract the enclosed \`OneKeePass_0.27.0_Windows_x64_Portable.zip\` into a writable location.
+5. Verify the included SHA-256 manifest, then start \`OneKeePass.exe\`. Test with a disposable KDBX database first.
+
+The Windows portable build is **not** yet security-hardened against unwanted network access. The ZIP retains the current application's optional features and updater until they are separately audited and modified.
