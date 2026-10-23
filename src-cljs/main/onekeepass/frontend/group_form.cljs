@@ -31,12 +31,10 @@
 
 (def ^:private icons-dialog-flag (r/atom false))
 (def ^:private icon-tab (r/atom 0))
-(def ^:private url-input (r/atom ""))
 
 (defn- close-icons-dialog []
   (reset! icons-dialog-flag false)
-  (reset! icon-tab 0)
-  (reset! url-input ""))
+  (reset! icon-tab 0))
 
 (defn- show-icons-dialog []
   (reset! icons-dialog-flag true))
