@@ -3,6 +3,7 @@
                    [onekeepass.frontend.translation :refer [tr-m]])
   (:require [clojure.string :as str]
             [onekeepass.frontend.background :as bg]
+            [onekeepass.frontend.constants :as const]
             [onekeepass.frontend.events.common :as cmn-events :refer [check-error on-error]]
             [onekeepass.frontend.utils :refer [str->int]]
             [re-frame.core :refer [dispatch reg-event-db reg-event-fx reg-fx
@@ -263,16 +264,22 @@
        ;; ssh-agent-support rides the normal update-preference path like
        ;; browser-ext-support; the backend persists the flag and starts/stops the
        ;; listener when it changes (see AppState::update_preference).
-       {:fx [[:bg-update-preference (as-map [theme
-                                             language
-                                             session-timeout
-                                             clipboard-timeout
-                                             window-action-on-copy
-                                             backup
-                                             browser-ext-support
-                                             ssh-agent-support
-                                             auto-save
-                                             default-entry-category-groupings])]]}))))
+       (let [preference-data (as-map [theme
+                                      language
+                                      session-timeout
+                                      clipboard-timeout
+                                      window-action-on-copy
+                                      backup
+                                      browser-ext-support
+                                      ssh-agent-support
+                                      auto-save
+                                      default-entry-category-groupings])
+             ;; Browser integration is disabled on Windows, but general
+             ;; settings must still save without calling its rejected backend.
+             preference-data (if (= (:os-name db) const/WINDOWS)
+                               (dissoc preference-data :browser-ext-support)
+                               preference-data)]
+         {:fx [[:bg-update-preference preference-data]]})))))
 
 (reg-event-fx
  :app-settings/open-backup-dir-dialog
