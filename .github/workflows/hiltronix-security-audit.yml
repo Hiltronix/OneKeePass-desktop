@@ -1,0 +1,82 @@
+name: Hiltronix dependency security audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/hiltronix-security-audit.yml'
+      - 'src-tauri/Cargo.lock'
+      - 'onekeepass-proxy/Cargo.lock'
+      - 'yarn.lock'
+      - 'package.json'
+
+permissions:
+  contents: read
+
+jobs:
+  advisory-scan:
+    name: RustSec and JavaScript dependency advisory scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Configure Node and Yarn
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Configure Rust for cargo-audit
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install security scan tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --global yarn@1.22.22
+          cargo install cargo-audit --locked
+
+      - name: Scan Cargo lockfiles and JavaScript dependencies
+        shell: bash
+        run: |
+          set -uo pipefail
+          mkdir -p security-reports
+
+          echo 'Running RustSec checks (nonzero may indicate advisories)'
+          cargo audit --file src-tauri/Cargo.lock --json             > security-reports/cargo-desktop.json 2> security-reports/cargo-desktop.stderr
+          desktop_exit=$?
+
+          cargo audit --file onekeepass-proxy/Cargo.lock --json             > security-reports/cargo-sidecar.json 2> security-reports/cargo-sidecar.stderr
+          sidecar_exit=$?
+
+          echo 'Running Yarn Classic advisory check'
+          yarn audit --json             > security-reports/yarn-audit.jsonl 2> security-reports/yarn-audit.stderr
+          yarn_exit=$?
+
+          {
+            echo '# Security dependency audit'
+            echo
+            echo "Source commit: ${GITHUB_SHA}"
+            echo
+            echo '| Inventory | Scan exit code |'
+            echo '|---|---:|'
+            echo "| Windows desktop Rust lockfile | ${desktop_exit} |"
+            echo "| Native browser proxy Rust lockfile (built but not shipped) | ${sidecar_exit} |"
+            echo "| Yarn application dependencies | ${yarn_exit} |"
+            echo
+            echo 'Exit 0 means the scanner found no flagged vulnerabilities or errors.'
+            echo 'A nonzero result may indicate advisories, network access errors or scanner issues; inspect attached stderr/JSON.'
+            echo 'This is an advisory scan, not an audit of code behavior or runtime traffic.'
+          } > security-reports/SUMMARY.md
+          cat security-reports/SUMMARY.md
+
+      - name: Upload advisory reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Hiltronix-Security-Dependency-Reports-${{ github.run_number }}
+          path: security-reports/
+          if-no-files-found: warn
+          retention-days: 30
