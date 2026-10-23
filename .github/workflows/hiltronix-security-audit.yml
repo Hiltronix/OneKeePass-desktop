@@ -76,22 +76,22 @@ jobs:
           echo
           echo '--- RustSec desktop summary ---'
           if command -v jq >/dev/null && test -s security-reports/cargo-desktop.json; then
-            jq -r '.vulnerabilities.list[]? | "\\(.advisory.id) | \\(.package.name) \\(.package.version) | \\(.advisory.title)"' security-reports/cargo-desktop.json | head -100
-            jq -r '.warnings | to_entries[]? | "\\(.key): \\(.value | length) entries"' security-reports/cargo-desktop.json | head -30
+            jq -r '.vulnerabilities.list[]? | "\(.advisory.id) | \(.package.name) \(.package.version) | \(.advisory.title)"' security-reports/cargo-desktop.json | head -100
+            jq -r '.warnings | to_entries[]? | "\(.key): \(.value | length) entries"' security-reports/cargo-desktop.json | head -30
           fi
           sed -n '1,25p' security-reports/cargo-desktop.stderr
 
           echo
           echo '--- RustSec sidecar summary ---'
           if command -v jq >/dev/null && test -s security-reports/cargo-sidecar.json; then
-            jq -r '.vulnerabilities.list[]? | "\\(.advisory.id) | \\(.package.name) \\(.package.version) | \\(.advisory.title)"' security-reports/cargo-sidecar.json | head -100
+            jq -r '.vulnerabilities.list[]? | "\(.advisory.id) | \(.package.name) \(.package.version) | \(.advisory.title)"' security-reports/cargo-sidecar.json | head -100
           fi
           sed -n '1,25p' security-reports/cargo-sidecar.stderr
 
           echo
           echo '--- Yarn advisory summary ---'
           if command -v jq >/dev/null && test -s security-reports/yarn-audit.jsonl; then
-            jq -r 'select(.type == "auditAdvisory") | .data.advisory | "\\(.id) | \\(.module_name) | \\(.severity) | \\(.title)"' security-reports/yarn-audit.jsonl | head -100
+            jq -r 'select(.type == "auditAdvisory") | .data.advisory | "\(.id) | \(.module_name) | \(.severity) | \(.title)"' security-reports/yarn-audit.jsonl | head -100
             jq -r 'select(.type == "auditSummary") | .data' security-reports/yarn-audit.jsonl | head -30
           fi
           sed -n '1,25p' security-reports/yarn-audit.stderr
