@@ -359,24 +359,6 @@
                                  [mui-tooltip {:title "Icon"} svg-icon]])]
                  ;; Custom icons panel
                  [mui-stack {:spacing 2}
-                  [mui-stack {:direction "row" :spacing 1 :sx {:align-items "center"}}
-                   [m/text-field {:label (t/lstr-l 'addFromUrl)
-                                  :value @icon-url-input
-                                  :variant "standard"
-                                  :fullWidth true
-                                  :sx {:flex-grow 1}
-                                  :on-change #(reset! icon-url-input (-> % .-target .-value))}]
-                   [mui-stack {:direction "row"  }
-                    [mui-button { :sx {:mt 2}
-                                 :color "primary"
-                                 :disabled (str/blank? @icon-url-input)
-                                 :on-click #(do (ci-events/add-icon-from-url
-                                                 @icon-url-input
-                                                 [:entry-form-data-update-field-value :custom-icon-uuid])
-                                                (close-icons-dialog))}
-                     (t/lstr-bl 'add)]
-                    ]
-                   ]
                   [mui-stack {:sx {:align-items "center"}}
                    [mui-button {:variant "outlined"
                                 :on-click #(do (ci-events/add-icon-from-file
