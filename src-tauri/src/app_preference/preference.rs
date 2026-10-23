@@ -141,6 +141,16 @@ pub(crate) enum WindowActionOnCopy {
     Background,
 }
 
+// Physical screen coordinates and normal (non-maximized) outer dimensions.
+#[derive(Clone, Copy, Serialize, Deserialize, Debug)]
+pub(crate) struct WindowGeometry {
+    pub(crate) x: i32,
+    pub(crate) y: i32,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+    pub(crate) maximized: bool,
+}
+
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub(crate) struct Preference {
     version: String,
@@ -161,6 +171,10 @@ pub(crate) struct Preference {
     // folded into window_action_on_copy on load and never written back.
     #[serde(default, skip_serializing)]
     minimize_on_copy: Option<bool>,
+
+    // Retained in preference.toml (under onekeepass-data for portable Windows).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    window_geometry: Option<WindowGeometry>,
 
     // Determines the theme colors etc
     theme: String,
@@ -209,6 +223,7 @@ impl Default for Preference {
             session_timeout: (15 as u16),
             clipboard_timeout: (30 as u16),
             window_action_on_copy: WindowActionOnCopy::None,
+            window_geometry: None,
             minimize_on_copy: None,
             theme: LIGHT.into(),
             language: translation::current_locale_language(),
@@ -226,6 +241,15 @@ impl Default for Preference {
 }
 
 impl Preference {
+    pub(crate) fn window_geometry(&self) -> Option<WindowGeometry> {
+        self.window_geometry
+    }
+
+    pub(crate) fn save_window_geometry(&mut self, geometry: WindowGeometry) {
+        self.window_geometry = Some(geometry);
+        self.write_toml();
+    }
+
     fn is_pre_0_20_version(version: &str) -> bool {
         let mut parts = version.split('.');
         let major = parts.next().and_then(|v| v.parse::<u32>().ok());
