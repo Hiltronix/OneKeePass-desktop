@@ -121,7 +121,6 @@ fn main() {
             #[cfg(not(feature = "mas-build"))]
             commands::active_window_to_auto_type,
             commands::add_custom_icon_from_file,
-            commands::add_custom_icon_from_url,
             commands::analyzed_password,
             commands::authenticate_with_biometric,
             commands::auto_open_group_uuid,
