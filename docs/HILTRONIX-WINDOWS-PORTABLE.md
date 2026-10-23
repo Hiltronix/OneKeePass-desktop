@@ -27,7 +27,7 @@ The script runs these phases, aborting on a failed external command:
 1. `yarn install --frozen-lockfile`
 2. Production `shadow-cljs release app`
 3. `cargo build --release --locked` for the required browser sidecar
-4. `yarn tauri build --no-bundle --target x86_64-pc-windows-msvc -- --locked`
+4. `cargo fetch --locked --manifest-path src-tauri/Cargo.toml --target x86_64-pc-windows-msvc`, followed by `yarn tauri build --no-bundle --target x86_64-pc-windows-msvc`
 5. Portable staging, ZIP creation, file checks, and SHA-256.
 
 Output:
