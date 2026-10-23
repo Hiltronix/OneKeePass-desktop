@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/hiltronix-js-lockfile-remediation.yml'
+      - 'package.json'
 
 permissions:
   contents: write
