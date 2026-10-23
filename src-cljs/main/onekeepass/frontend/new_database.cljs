@@ -52,15 +52,15 @@
                     :on-change (nd-events/field-update-factory :database-description)
                     :variant "standard" :fullWidth true}]]
 
-    [mui-box {:sx {:width "80%"}}
-     (when-not (= @(cmn-events/os-name) const/WINDOWS)
-      [mui-form-control-label
-      {:control (r/as-element
-                 [mui-checkbox
-                  {:checked (boolean save-remote?)
-                   :on-change (fn [^js/CheckedEvent e]
-                                (nd-events/save-remote-toggle (-> e .-target .-checked)))}])
-       :label (t/lstr-l "saveRemote")}])]])
+    (when-not (= @(cmn-events/os-name) const/WINDOWS)
+      [mui-box {:sx {:width "80%"}}
+       [mui-form-control-label
+        {:control (r/as-element
+                   [mui-checkbox
+                    {:checked (boolean save-remote?)
+                     :on-change (fn [^js/CheckedEvent e]
+                                  (nd-events/save-remote-toggle (-> e .-target .-checked)))}])
+         :label (t/lstr-l "saveRemote")}]])]])
 
 
 
