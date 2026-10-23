@@ -65,7 +65,7 @@ To download the build without installing development tools locally:
 1. Open the [Windows Actions runs](https://github.com/Hiltronix/OneKeePass-desktop/actions/workflows/hiltronix-windows-portable.yml).
 2. Open a **successful** run (green checkmark). If the workflow failed, inspect its log rather than using an incomplete artifact.
 3. Under **Artifacts**, download the \`Hiltronix-Windows-x64-Portable-...\` ZIP.
-4. Extract that Actions artifact and then extract the enclosed \`OneKeePass_0.27.0_Windows_x64_Portable.zip\` into a writable location.
-5. Verify the included SHA-256 manifest, then start \`OneKeePass.exe\`. Test with a disposable KDBX database first.
+4. Extract the downloaded GitHub Actions artifact into a writable folder. The app files are uploaded directly; no second ZIP is required. Keep `OneKeePass.exe`, `.portable`, and `_up_` together.
+5. Run `OneKeePass.exe` and test with a disposable KDBX database. Keep the hidden `.portable` marker beside the EXE to enable portable data storage.
 
 The Windows portable build is **not** yet security-hardened against unwanted network access. The ZIP retains the current application's optional features and updater until they are separately audited and modified.
