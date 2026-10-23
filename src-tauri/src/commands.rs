@@ -1355,32 +1355,6 @@ pub async fn get_custom_icon_data(db_key: &str, custom_icon_uuid: &str) -> Resul
 }
 
 #[tauri::command]
-pub async fn add_custom_icon_from_url(
-    db_key: &str,
-    url: &str,
-) -> Result<kp_service::CustomIconSummary> {
-    let png = onekeepass_core::favicon::download_favicon(url)
-        .await
-        .map_err(|e| e.to_string())?;
-    // Extract hostname as icon name without pulling in the url crate.
-    // Strip scheme ("https://"), then take up to the first '/' or end of string.
-    let name = url
-        .split("://")
-        .nth(1)
-        .unwrap_or(url)
-        .split('/')
-        .next()
-        .unwrap_or(url)
-        .to_string();
-    let uuid = kp_service::add_custom_icon(db_key, name, png)?;
-    let icons = kp_service::list_custom_icons(db_key)?;
-    icons
-        .into_iter()
-        .find(|i| i.uuid == uuid)
-        .ok_or_else(|| "Icon not found after add".to_string())
-}
-
-#[tauri::command]
 pub async fn add_custom_icon_from_file(
     db_key: &str,
     file_path: &str,
