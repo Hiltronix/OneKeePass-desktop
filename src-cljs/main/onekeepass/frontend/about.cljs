@@ -37,7 +37,7 @@
          [mui-divider {:sx {:my 1}}]
          [mui-typography {:variant "body2"} (tr-dlg-text "aboutDescription")]
          [mui-typography {:variant "body2"}
-          "Hiltronix edition: a modified OneKeePass desktop build for privacy-conscious offline use. " 
+          "Hiltronix edition: a modified OneKeePass desktop build focused on privacy and local-first operation. "
           "Changes and support for this fork are maintained by Hiltronix; the original OneKeePass developers created the application."]
          [mui-divider {:sx {:my 1}}]
          [mui-stack {:direction "row" :spacing 1 :alignItems "center"}
