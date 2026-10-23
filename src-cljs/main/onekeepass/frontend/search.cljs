@@ -91,6 +91,9 @@
                                                        (when-let [input (.getElementById js/document "search_fld")]
                                                          (.focus input)
                                                          (.select input)))}}
+                 :on-close (fn [_event reason]
+                             (when (= reason "escapeKeyDown")
+                               (sch-event/cancel-on-click)))
                  :on-click #(.stopPropagation %)
                  :sx {"& .MuiDialog-paper" {:width "85%"}}}
      [mui-dialog-title (tr-dlg-title "search")]
