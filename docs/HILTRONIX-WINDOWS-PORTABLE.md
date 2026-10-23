@@ -79,6 +79,7 @@ The Windows portable build now disables built-in update, URL-icon, SFTP/WebDAV, 
 - **Dialogs:** Escape invokes the existing Cancel/Close callback for database settings, application settings, Manage Custom Icons, and Search. The nested browser reconnect prompt has its own Escape callback.
 - **Tooltips:** Toolbar buttons are wrapped to support disabled-button tooltips, and hover delay is reduced from 2000 ms to 700 ms.
 - **Password Generator:** Escape closes the dialog without copying a password.
+- **About dialog:** Escape invokes the same close event as the Close button; following the MUI dialog convention, clicking outside does not close it.
 - **Revision:** About shows a source revision between Version and Platform. The value is updated for reviewed source revisions, not for repeated builds of the same commit.
 - **Windows offline controls:** SFTP/WebDAV operations are guarded, remote-storage and browser-integration UI entrypoints are hidden/disabled, and browser proxy excluded from portable ZIP.
 

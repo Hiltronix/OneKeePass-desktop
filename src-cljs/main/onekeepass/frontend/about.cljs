@@ -23,6 +23,9 @@
           os-version  @(cmn-events/os-version)]
       [mui-dialog {:open true
                    :dir (t/dir)
+                   :on-close (fn [_event reason]
+                               (when (= reason "escapeKeyDown")
+                                 (gd-events/about-dialog-close)))
                    :on-click #(.stopPropagation ^js/Event %)
                    :sx {"& .MuiPaper-root" {:width "440px"}}}
        [mui-dialog-title (tr-dlg-title "about")]
