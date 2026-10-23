@@ -27,7 +27,6 @@ mod sandbox;
 mod ssh_agent;
 mod translation;
 #[cfg(not(feature = "mas-build"))]
-mod updater;
 mod window_behavior;
 // mod callback_service_provider;
 
@@ -129,8 +128,6 @@ fn main() {
             commands::browser_ext_pick_install_dir,
             commands::browser_ext_manifest_statuses,
             commands::browser_ext_use_user_permission,
-            #[cfg(not(feature = "mas-build"))]
-            commands::check_for_updates,
             commands::clear_csv_data_cache,
             commands::csv_import_profiles,
             commands::csv_import_profile_mapping,
