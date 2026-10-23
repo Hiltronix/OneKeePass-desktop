@@ -81,12 +81,14 @@ jobs:
           Write-Host "Portable ZIP: $($zip.FullName)"
           Write-Host "SHA256: $hash"
 
-      - name: Upload Windows portable ZIP
+      # GitHub already wraps uploaded artifacts in a ZIP. Upload the staged
+      # application directory, not our own ZIP, to avoid ZIP-inside-ZIP.
+      # The .portable marker is a hidden file and MUST be included.
+      - name: Upload unpacked Windows portable application
         uses: actions/upload-artifact@v4
         with:
           name: Hiltronix-Windows-x64-Portable-${{ github.run_number }}
-          path: |
-            dist/*Windows_x64_Portable.zip
-            dist/*Windows_x64_Portable.zip.sha256
+          path: dist/OneKeePass_*_Windows_x64_Portable/
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 14
