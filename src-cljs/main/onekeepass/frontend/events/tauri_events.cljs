@@ -134,7 +134,7 @@
       (dispatch [:about/dialog-show])
 
       (= menu-id const/MENU_ID_CHECK_FOR_UPDATES)
-      (dispatch [:check-for-updates/start {:silent? false}])
+      (dispatch [:generic-dialog-show :check-for-updates-dialog])
 
       :else
       (dispatch [:common/message-box-show "Work In Progress" (str "Menu action for " menu-id " will be implemented soon")]))))
