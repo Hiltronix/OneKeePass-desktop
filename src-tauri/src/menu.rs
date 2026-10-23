@@ -110,7 +110,6 @@ pub(crate) fn build_menus<R: Runtime>(app_handle: &AppHandle<R>) -> Result<(), t
 
     #[cfg(any(not(target_os = "macos"), feature = "mas-build"))]
     let app_submenu = SubmenuBuilder::with_id(app_handle, app_name, app_name)
-        .item(&about_menu_item)
         .separator()
         .item(&app_settings)
         .separator()
@@ -160,6 +159,8 @@ pub(crate) fn build_menus<R: Runtime>(app_handle: &AppHandle<R>) -> Result<(), t
         system_menu_translation.main_menu(MAIN_MENU_HELP),
     )
     .item(&check_for_updates_item)
+    .separator()
+    .item(&about_menu_item)
     .build()?;
 
     #[cfg(not(target_os = "macos"))]
