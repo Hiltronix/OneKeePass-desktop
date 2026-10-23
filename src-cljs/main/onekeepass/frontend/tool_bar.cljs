@@ -342,71 +342,71 @@
          ;; :mx spaces the left-group buttons apart (was a tightening -8px);
          ;; increase for more gap between Open/Save/Save-As/Close/Lock.
          [mui-box {:sx {"& .MuiButtonBase-root" {:mx "0.5px"}}}
-          [mui-tooltip {:title "Open" :enterDelay 2000}
-           [mui-icon-button
+          [mui-tooltip {:title "Open" :enterDelay 700}
+           [:span {:style {:display "inline-flex"}} [mui-icon-button
             {:edge "start" :color "inherit"
              :onClick od-events/open-file-explorer-on-click}
-            [mui-icon-folder]]]
+            [mui-icon-folder]]]]
 
-          [mui-tooltip {:title "Save" :enterDelay 2000}
-           [mui-icon-button
+          [mui-tooltip {:title "Save" :enterDelay 700}
+           [:span {:style {:display "inline-flex"}} [mui-icon-button
             {:edge "start" :color "inherit"
              :disabled  save-disabled? #_(or locked? (not @(cmn-events/db-save-pending?)))
              :on-click  tb-events/save-current-db}
-            [mui-icon-save]]]
+            [mui-icon-save]]]]
 
-          [mui-tooltip {:title "Save As" :enterDelay 2000}
-           [mui-icon-button
+          [mui-tooltip {:title "Save As" :enterDelay 700}
+           [:span {:style {:display "inline-flex"}} [mui-icon-button
             {:edge "start" :color "inherit"
              :disabled locked?
              :on-click  cmn-events/save-as}
-            [mui-icon-save-as]]]
+            [mui-icon-save-as]]]]
 
-          [mui-tooltip {:title "Close Database" :enterDelay 2000}
-           [mui-icon-button
+          [mui-tooltip {:title "Close Database" :enterDelay 700}
+           [:span {:style {:display "inline-flex"}} [mui-icon-button
             {:edge "start" :color "inherit"
              :on-click tb-events/close-current-db-on-click}
-            [mui-icon-cancel-presentation]]]
+            [mui-icon-cancel-presentation]]]]
 
           (if locked?
-            [mui-tooltip {:title "Unlock Database" :enterDelay 2000}
-             [mui-icon-button
+            [mui-tooltip {:title "Unlock Database" :enterDelay 700}
+             [:span {:style {:display "inline-flex"}} [mui-icon-button
               {:edge "start" :color "inherit"
                :on-click #(tb-events/unlock-current-db biometric-type)}
-              [mui-icon-lock-outlined]]]
-            [mui-tooltip {:title "Lock Database" :enterDelay 2000}
-             [mui-icon-button
+              [mui-icon-lock-outlined]]]]
+            [mui-tooltip {:title "Lock Database" :enterDelay 700}
+             [:span {:style {:display "inline-flex"}} [mui-icon-button
               {:edge "start" :color "inherit"
                :on-click tb-events/lock-current-db}
-              [mui-icon-lock-open-outlined]]])]
+              [mui-icon-lock-open-outlined]]]])]
          [:span  {:style {:flex-grow "1"}}]
 
          ;; Right-side group. Same :mx spacing as the left box so both groups
          ;; are loosened by the same amount.
          [mui-box {:sx {"& .MuiButtonBase-root" {:mx "0.5px"}}}
-          [mui-tooltip {:title "Manage Custom Icons" :enterDelay 2000}
-           [mui-icon-button {:edge "end"
+          [mui-tooltip {:title "Manage Custom Icons" :enterDelay 700}
+           [:span {:style {:display "inline-flex"}} [mui-icon-button {:edge "end"
                              :disabled locked?
                              :color "inherit"
                              :on-click #(do (ci-events/refresh-icons-for-db)
                                             (ci-events/show-manage-dialog))}
             ;;"🖼"
-            [mui-icon-image]]]
+            [mui-icon-image]]]]
 
-          [mui-tooltip {:title "Settings" :enterDelay 2000}
-           [mui-icon-button {:edge "end"
+          [mui-tooltip {:title "Settings" :enterDelay 700}
+           [:span {:style {:display "inline-flex"}} [mui-icon-button {:edge "end"
                              :disabled locked?
                              :color "inherit"
                              :on-click  settings-events/read-db-settings #_dl-events/open-settings-dialog}
 
-            [mui-icon-settings-outlined]]]
+            [mui-icon-settings-outlined]]]]
 
-          [mui-tooltip {:title "Search" :enterDelay 2000}
-           [mui-icon-button {:edge "end"
+          [mui-tooltip {:title "Search" :enterDelay 700}
+           [:span {:style {:display "inline-flex"}} [mui-icon-button {:edge "end"
                              :color "inherit"
                              :disabled locked?
                              :on-click srch-event/search-dialog-show}
-            [mui-icon-search]]]]]]
+            [mui-icon-search]]]]]]]
 
        ;; Include all dialogs that we need to use when the toll bar is visibible
        ;; Also see start_page.cljs for other dialogs  
