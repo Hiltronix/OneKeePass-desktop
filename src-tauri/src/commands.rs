@@ -300,6 +300,9 @@ pub(crate) async fn browser_ext_use_user_permission(
     browser_id: &str,
     confirmed: bool,
 ) -> Result<()> {
+    if cfg!(target_os = "windows") {
+        return Err("Browser integration is disabled in this Hiltronix Windows build".into());
+    }
     Ok(app_state.browser_ext_use_user_permission(browser_id, confirmed))
 }
 
@@ -314,6 +317,9 @@ pub(crate) async fn browser_ext_pick_install_dir<R: tauri::Runtime>(
     app_state: State<'_, app_state::AppState>,
     browser_id: String,
 ) -> Result<()> {
+    if cfg!(target_os = "windows") {
+        return Err("Browser integration is disabled in this Hiltronix Windows build".into());
+    }
     Ok(app_state.browser_ext_pick_install_dir(&app, &browser_id)?)
 }
 

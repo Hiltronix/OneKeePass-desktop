@@ -239,7 +239,15 @@ async fn run_server(path: String) {
     }
 }
 
-// This should be called to start the backend listener to receive messages / send messages from/to a browser native message proxy app
+// Fail closed on Windows, regardless of which internal caller invokes this.
+// The Hiltronix Windows edition never starts the browser-extension IPC server.
+#[cfg(target_os = "windows")]
+pub(crate) fn start_proxy_handler() {
+    log::warn!("Browser native messaging is disabled in the Hiltronix Windows edition");
+}
+
+// Other desktop platforms retain their existing native messaging behavior.
+#[cfg(not(target_os = "windows"))]
 pub(crate) fn start_proxy_handler() {
     log::debug!("In start_proxy_handler....");
     if !is_endpoint_server_running() {

@@ -226,11 +226,13 @@ fn add_identity(
     };
 
     let mut constraints = Vec::new();
+    // Client Mode cannot promise that the external agent will prompt.
+    // Never silently downgrade a key explicitly requiring confirmation.
     if identity.require_confirmation {
-        log::debug!(
-            "SSH agent client mode: ignoring Require Confirmation for '{}'; confirmation is only supported in Agent Mode",
+        return Err(format!(
+            "SSH Key '{}' requires confirmation; use Agent Mode instead of Client Mode",
             comment
-        );
+        ));
     }
     if let Some(lifetime) = identity.lifetime {
         let secs = lifetime.as_secs().min(u32::MAX as u64) as u32;

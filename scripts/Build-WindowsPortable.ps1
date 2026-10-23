@@ -143,6 +143,10 @@ try {
         $Archive.Dispose()
     }
 
+    if ($Names -contains "onekeepass-proxy.exe") {
+        throw "The browser native-messaging executable must not ship in the Windows portable ZIP."
+    }
+
     $Hash = (Get-FileHash -LiteralPath $Zip -Algorithm SHA256).Hash.ToLowerInvariant()
     "$Hash  $Name.zip" | Set-Content -Path "$Zip.sha256" -Encoding ASCII
     Write-Host "Portable archive: $Zip"
