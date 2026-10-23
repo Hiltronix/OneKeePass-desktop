@@ -21,7 +21,6 @@ use crate::ssh_agent;
 use crate::{app_preference, app_state};
 use crate::{biometric, OTP_TOKEN_UPDATE_EVENT};
 #[cfg(not(feature = "mas-build"))]
-use crate::updater;
 use crate::{mas, menu, pass_phrase, translation};
 use onekeepass_core::async_service as kp_async_service;
 use onekeepass_core::db_service as kp_service;
@@ -1666,18 +1665,6 @@ pub async fn rs_get_remote_storage_config(
         rs_storage_type,
         connection_id,
     )?)
-}
-
-// Mac App Store builds: Apple requires updates to flow through the App
-// Store, so we omit the update-check command entirely. The cljs side
-// silently no-ops on missing-command errors via the :silent? branch.
-#[cfg(not(feature = "mas-build"))]
-#[tauri::command]
-pub(crate) async fn check_for_updates(
-    app_state: State<'_, app_state::AppState>,
-) -> Result<updater::UpdateCheckResult> {
-    let current_version = app_state.app_version();
-    updater::check_for_updates(current_version).await
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
