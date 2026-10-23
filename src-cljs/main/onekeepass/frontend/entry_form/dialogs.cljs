@@ -318,21 +318,16 @@
 
 (def icons-dialog-flag (r/atom false))
 (def ^:private icon-dialog-tab (r/atom 0))
-(def ^:private icon-url-input (r/atom ""))
 
 (defn close-icons-dialog []
   (reset! icons-dialog-flag false)
-  (reset! icon-dialog-tab 0)
-  (reset! icon-url-input ""))
+  (reset! icon-dialog-tab 0))
 
 (defn show-icons-dialog
-  "Opens the icons dialog. The optional `prefill-url` is used to seed the
-   'Add from URL' text field on the Custom Icons tab — typically the entry's
-   own URL field value, so the user can one-click fetch its favicon."
+  "Open the icon dialog. The second arity is retained for older callers,
+   but no URL or network request is used in this local import workflow."
   ([] (reset! icons-dialog-flag true))
-  ([prefill-url]
-   (reset! icon-url-input (or prefill-url ""))
-   (reset! icons-dialog-flag true)))
+  ([_unused-url] (reset! icons-dialog-flag true)))
 
 (defn icons-dialog
   ([_dialog-open? _call-on-icon-selection]
