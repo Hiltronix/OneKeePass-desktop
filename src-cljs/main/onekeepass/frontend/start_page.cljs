@@ -1,6 +1,7 @@
 (ns ^:figwheel-always onekeepass.frontend.start-page
   (:require
    [onekeepass.frontend.about :as about]
+   [onekeepass.frontend.constants :as const]
    [onekeepass.frontend.app-settings :refer [app-settings-dialog-main]]
    [onekeepass.frontend.browser-integration :as browser-integration]
    [onekeepass.frontend.ssh-agent :as ssh-agent]
@@ -76,14 +77,15 @@
          (tr-l openDatabase)]
         [od-form/open-db-dialog-main]]
 
-       ;; Open from a remote SFTP / WebDAV server
-       [mui-stack {:direction "row" :gap 2 :alignItems "center"}
+       ;; Remote-storage picker is unavailable in the Windows offline build.
+       (when-not (= @(cmn-events/os-name) const/WINDOWS)
+         [mui-stack {:direction "row" :gap 2 :alignItems "center"}
         [mui-icon-button {:edge "start" :color "inherit" :sx {:ml 0}
                           :onClick rs-events/show-for-open}
          [mui-icon-folder-outlined {}]]
         [mui-link {:variant "subtitle1"
                    :onClick rs-events/show-for-open}
-         (t/lstr-l "openRemote")]]
+         (t/lstr-l "openRemote")]])
 
        [mui-typography {:sx {:mt 4} :variant "h6"} (tr-t recent)]
 

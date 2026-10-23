@@ -3,6 +3,8 @@
    [onekeepass.frontend.common-components :refer [cipher-algorithms
                                                   field-help-icon
                                                   kdf-algorithms]]
+   [onekeepass.frontend.constants :as const]
+   [onekeepass.frontend.events.common :as cmn-events]
    [onekeepass.frontend.events.generic-dialogs :as gd-events]
    [onekeepass.frontend.events.new-database :as nd-events]
    [onekeepass.frontend.mui-components :as m :refer [mui-alert mui-box
@@ -51,13 +53,14 @@
                     :variant "standard" :fullWidth true}]]
 
     [mui-box {:sx {:width "80%"}}
-     [mui-form-control-label
+     (when-not (= @(cmn-events/os-name) const/WINDOWS)
+      [mui-form-control-label
       {:control (r/as-element
                  [mui-checkbox
                   {:checked (boolean save-remote?)
                    :on-change (fn [^js/CheckedEvent e]
                                 (nd-events/save-remote-toggle (-> e .-target .-checked)))}])
-       :label (t/lstr-l "saveRemote")}]]]])
+       :label (t/lstr-l "saveRemote")}]])]])
 
 
 

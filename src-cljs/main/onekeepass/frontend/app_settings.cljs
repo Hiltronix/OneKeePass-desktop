@@ -59,10 +59,11 @@
      [mui-list-item-icon [mui-icon-folder-outlined]]
      [mui-list-item-text text-style-m (tr-l "fileManagement")]]
 
-    [mui-list-item-button {:on-click #(app-settings-events/app-settings-panel-select :browser-integration)
-                           :selected (= panel :browser-integration)}
-     [mui-list-item-icon [mui-icon-open-in-browser]]
-     [mui-list-item-text text-style-m (tr-l "browserIntegration")]]
+    (when-not (= @(ce/os-name) const/WINDOWS)
+      [mui-list-item-button {:on-click #(app-settings-events/app-settings-panel-select :browser-integration)
+                             :selected (= panel :browser-integration)}
+       [mui-list-item-icon [mui-icon-open-in-browser]]
+       [mui-list-item-text text-style-m (tr-l "browserIntegration")]])
 
     [mui-list-item-button {:on-click #(app-settings-events/app-settings-panel-select :ssh-agent)
                            :selected (= panel :ssh-agent)}
@@ -665,10 +666,12 @@
         [file-management dialog-data]
 
         :browser-integration
-        [mui-stack
-         [browser-integration dialog-data]
-         [m/mui-divider {:sx {:mt 1 :mb 1}}]
-         [supported-browsers dialog-data]]
+        (if (= @(ce/os-name) const/WINDOWS)
+          [mui-typography "Browser integration is disabled in this Hiltronix Windows build."]
+          [mui-stack
+           [browser-integration dialog-data]
+           [m/mui-divider {:sx {:mt 1 :mb 1}}]
+           [supported-browsers dialog-data]])
 
         :ssh-agent
         [ssh-agent-panel dialog-data]

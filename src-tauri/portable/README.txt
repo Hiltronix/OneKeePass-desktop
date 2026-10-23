@@ -29,7 +29,6 @@ them).
 Files in this folder
 --------------------
   OneKeePass.exe        The application
-  onekeepass-proxy.exe  Helper used only for the browser extension
   .portable             Marker file that enables portable mode - do NOT
                         delete it. Without it the app stores its data under
                         %USERPROFILE%\.onekeepass like the installed version
@@ -39,7 +38,7 @@ Files in this folder
 Updating to a new version
 -------------------------
 Download the new portable zip and replace OneKeePass.exe,
-onekeepass-proxy.exe and the '_up_' folder. Keep your 'onekeepass-data'
+and the '_up_' folder. Keep your 'onekeepass-data'
 folder as it is.
 
 Notes and limitations
@@ -50,10 +49,8 @@ Notes and limitations
 - The 'Recent files' list stores full file paths. If the drive letter of
   your USB drive changes on another computer, entries in that list may not
   open until you open the database file again manually.
-- Enabling the browser extension integration writes a small configuration
-  file and registry entries on the computer you are using (browsers require
-  this). This is the only OneKeePass setting that leaves data on the host
-  machine, and it also records the current location of onekeepass-proxy.exe.
-  If your drive letter changes later, enable the browser integration again.
+- Remote SFTP/WebDAV access and browser extension integration are disabled
+  in this Hiltronix Windows edition. Older browser manifests are not removed
+  automatically.
 - While viewing an entry attachment, a temporary copy is placed in the
   Windows temp folder. It is removed when the app starts and when it quits.

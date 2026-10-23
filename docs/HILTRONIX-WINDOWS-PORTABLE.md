@@ -1,6 +1,6 @@
 # Hiltronix Windows x64 portable build
 
-This is a build procedure for the **current, unmodified OneKeePass v0.27.0 feature set** in this fork. It does **not** yet disable updater checks, network requests, browser integration, or remote storage. Do not treat it as the later offline/security-hardened edition.
+This describes the Hiltronix-modified Windows edition of OneKeePass v0.27.0. Automatic updates, URL icon downloads, SFTP/WebDAV transport, and browser integration are disabled. Actual runtime network isolation has not yet been verified.
 
 ## Prerequisites
 
@@ -37,7 +37,7 @@ dist/OneKeePass_0.27.0_Windows_x64_Portable.zip
 dist/OneKeePass_0.27.0_Windows_x64_Portable.zip.sha256
 ```
 
-The ZIP includes `OneKeePass.exe`, `onekeepass-proxy.exe`, the `.portable` marker, `README.txt`, and the `_up_/resources/public/` directories configured under Tauri's `bundle.resources`.
+The ZIP includes `OneKeePass.exe`, the `.portable` marker, `README.txt`, and `_up_/resources/public/`. The native browser proxy is still built to satisfy the existing Tauri configuration, but is excluded from the portable package.
 
 The `.portable` marker is important: existing Rust code detects it and saves app preferences, logs and backups in `onekeepass-data` beside the EXE. Never delete your existing `onekeepass-data` folder during an update. The script intentionally does not package that user-data directory.
 
@@ -54,7 +54,7 @@ The `.portable` marker is important: existing Rust code detects it and saves app
 
 ## Scope of later security work
 
-The current desktop source still contains an online update-checking command and optional networking/browser features. These will be separately audited and restricted after this build baseline is tested. Building a portable ZIP does not itself block Internet connectivity.
+Windows remote-storage operations reject calls before transport, including internal save/merge entrypoints. Browser integration and native messaging startup are disabled on Windows. User-requested external URL opening through the default browser remains available. Dependencies and runtime network traffic still require auditing; packaging does not enforce a process firewall.
 
 ## GitHub Actions: downloadable Windows ZIP
 
@@ -68,7 +68,7 @@ To download the build without installing development tools locally:
 4. Extract the downloaded GitHub Actions artifact into a writable folder. The app files are uploaded directly; no second ZIP is required. Keep `OneKeePass.exe`, `.portable`, and `_up_` together.
 5. Run `OneKeePass.exe` and test with a disposable KDBX database. Keep the hidden `.portable` marker beside the EXE to enable portable data storage.
 
-The Windows portable build is **not** yet security-hardened against unwanted network access. The ZIP retains the current application's optional features and updater until they are separately audited and modified.
+The Windows portable build now disables built-in update, URL-icon, SFTP/WebDAV, and browser-integration paths. This is **not yet proof of complete network isolation**; dynamic tests are outstanding.
 
 ## Hiltronix desktop usability changes (source revision in progress)
 
@@ -78,6 +78,9 @@ The Windows portable build is **not** yet security-hardened against unwanted net
 - **Custom icons:** Entry and group custom-icon pickers no longer offer a URL download. The Rust command for Internet favicon downloads is unregistered and removed; selecting local image files remains available.
 - **Dialogs:** Escape invokes the existing Cancel/Close callback for database settings, application settings, Manage Custom Icons, and Search. The nested browser reconnect prompt has its own Escape callback.
 - **Tooltips:** Toolbar buttons are wrapped to support disabled-button tooltips, and hover delay is reduced from 2000 ms to 700 ms.
+- **Password Generator:** Escape closes the dialog without copying a password.
+- **Revision:** About shows a source revision between Version and Platform. The value is updated for reviewed source revisions, not for repeated builds of the same commit.
+- **Windows offline controls:** SFTP/WebDAV operations are guarded, remote-storage and browser-integration UI entrypoints are hidden/disabled, and browser proxy excluded from portable ZIP.
 
 **Not a network-isolation guarantee:** The broader audit of SFTP/WebDAV, browser integration, any remaining network-capable commands, plugins, and third-party dependencies remains outstanding. These changes do not make a defensible claim that the Windows executable is unable to communicate over the network.
 
