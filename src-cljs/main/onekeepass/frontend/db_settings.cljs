@@ -307,6 +307,9 @@
         modified @(settings-events/db-settings-modified)]
     [mui-dialog {:open (if (nil? dialog-show) false dialog-show)
                  :dir (t/dir)
+                 :on-close (fn [_event reason]
+                             (when (= reason "escapeKeyDown")
+                               (settings-events/cancel-on-click)))
                  :on-click #(.stopPropagation ^js/Event %)
                  :sx {:min-width "600px"
                       "& .MuiDialog-paper" {:max-width "650px" :width "90%"}}}
