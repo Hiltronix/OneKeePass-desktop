@@ -8,7 +8,7 @@ Build on **Windows x64** with:
 
 - Visual Studio 2022 C++ Build Tools (MSVC and Windows SDK), with the compiler environment available to Rust/Botan.
 - Rust and Cargo, with the `x86_64-pc-windows-msvc` target.
-- Node.js (20 or newer), Yarn Classic 1.22.x, and JDK 17.
+- Node.js (20 or newer), Yarn Classic 1.22.x, and **JDK 21** (current Closure Compiler requires Java class-file version 65).
 - Microsoft Edge WebView2 Evergreen Runtime on the **computer where you run** the portable executable.
 
 The build needs network access the first time to retrieve Cargo, Yarn and ClojureScript dependencies. Inspect/pin the toolchain versions before treating builds as reproducible; `yarn.lock` and `Cargo.lock` constrain packages but do not alone freeze the compiler or downloaded build tools.
