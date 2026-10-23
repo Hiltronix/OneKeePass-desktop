@@ -1,8 +1,8 @@
 # Hiltronix OneKeePass security audit (Windows desktop)
 
-Audit date: 2026-10-23. Source revision: `2026-10-23-8` (desktop v0.27.0).
+Audit date: 2026-10-23. Source revision: `2026-10-23-10` (desktop v0.27.0).
 Scope: Hiltronix Windows x64 portable desktop edition plus the pinned
-Hiltronix `onekeepass-core` source at `1e57070fe7ca0c7d3ae4fb6fe38cc9ebbca95da5`.
+Hiltronix `onekeepass-core` source at `a4f0f2b74d893f3a4b8b5052c960e2497177fd2f` (quick-xml 0.41 branch-tested commit, now reachable from core main).
 Android is **not** covered by this Windows-only audit.
 
 ## Security model and limits
@@ -22,7 +22,7 @@ penetration test, dependency CVE scan, or formal proof of non-connectivity.
 | W-02 | Medium | Browser native messaging service had several indirect startup call sites, and an existing browser manifest may survive from an older build | **Hardened**: Windows startup is denied in `browser_service/proxy_handler.rs`; command-level permission and installation entry points reject Windows calls; existing manifest cleanup is a separate manual step |
 | W-03 | Medium | SSH Agent **Client Mode** previously ignored the per-key `Require Confirmation` flag when loading a key into an external agent | **Fixed**: such keys are rejected in Client Mode; Agent Mode preserves confirmation prompts and 60-second fail-closed timeout. SSH Agent Service itself remains available and disabled by default |
 | W-04 | Medium | `onekeepass-core` feature `favicon` enables HTTP downloading as well as local image decoding. The desktop requests this feature to normalize a **local icon file** | **Unresolved / not reachable via registered Tauri command**: remove by separating local icon conversion from download capability in a subsequent core/lockfile migration; do not remove local icon import |
-| W-05 | Medium | The desktop still depends on network-related packages, including SFTP/WebDAV in the shared core and `reqwest` required by the old update module | **No direct Windows path found** to network transports from registered commands. Remote-storage read/write/metadata and connect/list entry points are Windows-guarded; updater module is not registered or imported by `main.rs`. Dependency removal remains outstanding |
+| W-05 | Medium | Network-capable libraries remain transitively available through SFTP/WebDAV in the shared core and Tauri | **Constrained**: Windows remote-storage entry points are guarded, the updater is not linked, and the unused direct desktop reqwest dependency is removed. Further unused-core feature removal remains outstanding |
 | W-06 | Medium | Dependency and toolchain versions are lockfile-based but not fully reproducible | **Partially remediated**: RustSec and Yarn scans executed; many compatible patches and unused-dependency removals landed. Outstanding advisories, locked-toolchain verification, binary/SBOM inventory and dependency provenance review remain |
 | W-07 | Medium | No Windows packet-level baseline has been established, including offline startup, unlocking, editing, URL opening, SSH Agent disabled/enabled, and browser manifest leftovers | **Outstanding**: perform firewall/WFP or packet-capture testing on a Windows test machine and check process tree/child processes |
 | W-08 | Low | Windows portable builds previously compiled the disabled browser proxy unnecessarily | **Remediated in source**: Windows-specific Tauri config clears `bundle.externalBin` and its packaging script no longer compiles the proxy. Other platforms retain their original sidecar; verify with the next Windows build |
@@ -76,7 +76,7 @@ Source commits removed the disabled browser proxy from the Windows build pipelin
 
 The production frontend uses `shadow-cljs` rather than webpack. The unused `webpack` and `webpack-cli` build dependencies and their JavaScript transitive closure have been removed. Remaining `ws` and `yaml` dependencies are locked to patched compatible releases `8.21.3` and `1.10.3`, respectively.
 
-**Remaining risk and follow-up:** The pinned shared core still brings `quick-xml 0.37.5`; Linux Wayland tooling brings `quick-xml 0.39.4`. Both are below the fixes in `quick-xml 0.41.0`; a direct update is incompatible with those parents' version constraints. The RSA timing advisory `RUSTSEC-2023-0071` reports **no patched RSA crate versions**. These are not resolved by the patch batch and require source-level reachability/mitigation analysis or controlled upstream changes. Do not swap cryptographic implementations blindly.
+**Remaining risk and follow-up:** The shared-core KDBX parser is now upgraded to `quick-xml 0.41.0`, closing its duplicate-attribute denial-of-service advisory. The lockfile still contains `quick-xml 0.39.4` through Linux Wayland tooling; this is not the Windows KDBX parser. The RSA timing advisory `RUSTSEC-2023-0071` has **no patched crate version** and still needs exploitability/mitigation review. Do not swap cryptographic implementations blindly.
 
 The earlier advisory scan totals describe the **pre-remediation** dependency inventory. Fresh RustSec and Yarn scans and a Windows build on the final lockfiles are mandatory before accepting the updated build. SSH Agent Service and user-triggered URL opening remain functional features that must be preserved.
 
@@ -119,3 +119,12 @@ The root `webpack` and `webpack-cli` development dependencies were removed; the 
 ### Targeted JavaScript transitive patch resolutions
 
 After eliminating webpack and its transitive closure, only `ws 8.20.0` and `yaml 1.10.2` remained among the previously flagged Yarn packages. The root manifest now selects `ws 8.21.3` (fixing the fragmented-message resource exhaustion advisory) and `yaml 1.10.3` (fixing the deep-nesting stack overflow advisory) using Yarn Classic `resolutions`. Both preserve their dependency major versions. Verify the regenerated lockfile and a fresh advisory scan before calling the JavaScript tree clean. `resolutions` should be revisited when the upstream ranges themselves are updated.
+
+## Validated quick-xml 0.41.0 remediation (2026-10-23)
+
+- **Root cause:** the older plain `quick_xml::Reader` iterated untrusted KDBX XML attributes with a quadratic duplicate-name check (RUSTSEC-2026-0194). The separate namespace resolver allocation issue (RUSTSEC-2026-0195) does not affect the core's plain `Reader`; the core does not use `NsReader`.
+- **Resolution:** upgrade the pinned Hiltronix shared core's `quick-xml` dependency from `0.37.5` to `0.41.0`; adapt the text decoding and `GeneralRef` event APIs without altering KDBX encryption, stored templates, SSH Agent Service or URL opening.
+- **Core CI:** [run #39992949355](https://github.com/Hiltronix/OneKeePass-onekeepass-core/actions/runs/39992949355), **294 passed, 0 failed, 70 ignored**, including explicit tests for XML escapes and duplicate-attribute handling. One unrelated legacy time-zone-dependent test was made portable.
+- **Desktop CI:** [Windows portable run #39993374728](https://github.com/Hiltronix/OneKeePass-desktop/actions/runs/39993374728) passed compilation, archive hash checking and artifact upload for the patched core.
+- **Final dependency scan:** [run #39993374809](https://github.com/Hiltronix/OneKeePass-desktop/actions/runs/39993374809) found **4 remaining Rust advisory/package records**: 2 for `quick-xml 0.39.4` from Linux Wayland tooling, and 2 RSA timing advisory records. Yarn reported 0 vulnerabilities. Other unmaintained, unsound and yanked package warnings remain open for triage.
+- **Limit:** a successful compile and unit-test suite is not a complete KDBX interoperability/regression test against every user's database. Use disposable databases for the first run; user-controlled synchronized KDBX data should remain backed up.
