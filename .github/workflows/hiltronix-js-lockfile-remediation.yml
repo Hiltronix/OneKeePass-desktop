@@ -1,0 +1,60 @@
+name: Hiltronix controlled JavaScript lockfile remediation
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/hiltronix-js-lockfile-remediation.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: hiltronix-js-remediation
+  cancel-in-progress: false
+
+jobs:
+  regenerate-yarn-lockfile:
+    name: Prune unused webpack dependencies
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out exact source revision
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Configure Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Yarn Classic
+        shell: bash
+        run: npm install --global yarn@1.22.22
+
+      - name: Regenerate Yarn lockfile without running package install scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          yarn install --ignore-scripts --non-interactive
+          yarn install --frozen-lockfile --ignore-scripts --non-interactive
+          git diff --check
+          git diff --stat
+          echo 'Remaining packages of interest in lockfile:'
+          grep -E '^(webpack|webpack-cli|serialize-javascript|fast-uri|ajv|ws|yaml)@' yarn.lock || true
+
+      - name: Commit regenerated lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add yarn.lock
+          if git diff --cached --quiet; then
+            echo 'No Yarn lockfile changes required'
+            exit 0
+          fi
+          git commit -m "Remove unused webpack dependency closure from Yarn lockfile"
+          git push origin HEAD:main
