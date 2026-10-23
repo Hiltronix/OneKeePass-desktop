@@ -626,6 +626,9 @@
                                    error-fields] :as dialog-data}]
   [mui-dialog {:open (if (nil? dialog-show) false dialog-show)
                :dir (t/dir)
+               :on-close (fn [_event reason]
+                           (when (= reason "escapeKeyDown")
+                             (app-settings-events/app-settings-dialog-close)))
                ;;:fullScreen true
                ;;:scroll "paper"
                :on-click #(.stopPropagation %)
