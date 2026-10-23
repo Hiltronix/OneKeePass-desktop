@@ -1,6 +1,6 @@
 # Hiltronix OneKeePass security audit (Windows desktop)
 
-Audit date: 2026-10-23. Source revision: `2026-10-23-4` (desktop v0.27.0).
+Audit date: 2026-10-23. Source revision: `2026-10-23-5` (desktop v0.27.0).
 Scope: Hiltronix Windows x64 portable desktop edition plus the pinned
 Hiltronix `onekeepass-core` source at `1e57070fe7ca0c7d3ae4fb6fe38cc9ebbca95da5`.
 Android is **not** covered by this Windows-only audit.
@@ -25,7 +25,7 @@ penetration test, dependency CVE scan, or formal proof of non-connectivity.
 | W-05 | Medium | The desktop still depends on network-related packages, including SFTP/WebDAV in the shared core and `reqwest` required by the old update module | **No direct Windows path found** to network transports from registered commands. Remote-storage read/write/metadata and connect/list entry points are Windows-guarded; updater module is not registered or imported by `main.rs`. Dependency removal remains outstanding |
 | W-06 | Medium | Dependency and toolchain versions are lockfile-based but not fully reproducible; no vulnerability scan or third-party advisory review has been executed | **Outstanding**: run RustSec `cargo audit`, JavaScript dependency audit, binary/SBOM inventory, and review advisories before release |
 | W-07 | Medium | No Windows packet-level baseline has been established, including offline startup, unlocking, editing, URL opening, SSH Agent disabled/enabled, and browser manifest leftovers | **Outstanding**: perform firewall/WFP or packet-capture testing on a Windows test machine and check process tree/child processes |
-| W-08 | Low | Internal native browser proxy is still compiled as a Tauri build sidecar prerequisite, despite being excluded from portable staging | **Constrained**: ZIP packing now asserts that `onekeepass-proxy.exe` is absent. Future clean-up can remove the unused sidecar build requirement and the Tauri `externalBin` reference together |
+| W-08 | Low | Windows portable builds previously compiled the disabled browser proxy unnecessarily | **Remediated in source**: Windows-specific Tauri config clears `bundle.externalBin` and its packaging script no longer compiles the proxy. Other platforms retain their original sidecar; verify with the next Windows build |
 | W-09 | Low | Windows log files and temporary decrypted attachments are local resources and should be checked for secret leakage, retention, and ACLs | **Outstanding**: inspect file permissions and lifecycle with disposable data; never upload real passwords or logs containing secrets |
 | W-10 | Informational | The SSH Agent speaks over Windows local OpenSSH named pipe and Pageant-compatible IPC; it is separate from SFTP/WebDAV and does not itself contact remote servers | **Retained per user**: disabled by default; local same-user clients may request signing; protect keys with `Require Confirmation` in Agent Mode |
 
@@ -54,7 +54,7 @@ GitHub Actions dependency scan [#39962965134](https://github.com/Hiltronix/OneKe
 | Inventory | Scanner exit | Findings |
 |---|---:|---|
 | Desktop Rust Cargo.lock | 1 | 19 advisory/package records (including duplicate advisory IDs for multiple versions), plus 5 unmaintained, 2 unsound and 2 yanked warnings |
-| Browser-proxy Rust Cargo.lock | 1 | `RUSTSEC-2026-0007` in `bytes 1.10.1`; proxy is excluded from the portable archive but currently built |
+| Browser-proxy Rust Cargo.lock | 1 | `RUSTSEC-2026-0007` in `bytes 1.10.1`; proxy is not built or shipped by the Windows-only portable pipeline after W-08 remediation, although its separate lockfile still exists for other platforms |
 | JavaScript Yarn dependencies | 14 | Multiple high/moderate advisories, including `serialize-javascript`, `fast-uri`, `ws`, `yaml` and `ajv` |
 
 Important desktop Rust findings include `RUSTSEC-2023-0071` (`rsa` timing attack), `RUSTSEC-2026-0385` (`ctutils` nonconstant-time operations), `RUSTSEC-2026-0194/0195` (`quick-xml` denial of service), advisories affecting `quinn-proto`, and `rustls` / WebPKI trust and handshake issues. **Presence in a lockfile does not establish that a vulnerable execution path is reachable in this Windows build.** Determine which packages are included in the actual executable, their enabled features, whether affected APIs are called, and the patched versions before selecting upgrades.

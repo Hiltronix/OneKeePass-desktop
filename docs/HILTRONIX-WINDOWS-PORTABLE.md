@@ -26,8 +26,8 @@ The script runs these phases, aborting on a failed external command:
 
 1. `yarn install --frozen-lockfile`
 2. Production `shadow-cljs release app`
-3. `cargo build --release --locked` for the required browser sidecar
-4. `cargo fetch --locked --manifest-path src-tauri/Cargo.toml --target x86_64-pc-windows-msvc`, followed by `yarn tauri build --no-bundle --target x86_64-pc-windows-msvc`
+3. Validate the Windows-only Tauri override (`src-tauri/tauri.windows-offline.conf.json`) which removes the browser proxy from the build.
+4. `cargo fetch --locked --manifest-path src-tauri/Cargo.toml --target x86_64-pc-windows-msvc`, followed by `yarn tauri build --no-bundle --target x86_64-pc-windows-msvc --config <Windows-only override>`.
 5. Portable staging, ZIP creation, file checks, and SHA-256.
 
 Output:
@@ -37,7 +37,7 @@ dist/OneKeePass_0.27.0_Windows_x64_Portable.zip
 dist/OneKeePass_0.27.0_Windows_x64_Portable.zip.sha256
 ```
 
-The ZIP includes `OneKeePass.exe`, the `.portable` marker, `README.txt`, and `_up_/resources/public/`. The native browser proxy is still built to satisfy the existing Tauri configuration, but is excluded from the portable package.
+The ZIP includes `OneKeePass.exe`, the `.portable` marker, `README.txt`, and `_up_/resources/public/`. The browser proxy is neither built nor packaged for Windows. The Windows-only Tauri override clears `bundle.externalBin`; other operating systems retain the upstream configuration.
 
 The `.portable` marker is important: existing Rust code detects it and saves app preferences, logs and backups in `onekeepass-data` beside the EXE. Never delete your existing `onekeepass-data` folder during an update. The script intentionally does not package that user-data directory.
 

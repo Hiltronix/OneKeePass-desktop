@@ -62,21 +62,13 @@ try {
         Pop-Location
     }
 
-    Write-Host "==> Compiling browser sidecar required by current Tauri configuration"
-    Invoke-Checked "cargo.exe" @(
-        "build", "--manifest-path", (Join-Path $Root "onekeepass-proxy/Cargo.toml"),
-        "--release", "--locked", "--target", $Target
-    )
-    $SidecarBuilt = Join-Path $Root "onekeepass-proxy/target/$Target/release/onekeepass-proxy.exe"
-    if (-not (Test-Path -LiteralPath $SidecarBuilt -PathType Leaf)) {
-        throw "Compiled sidecar missing: $SidecarBuilt"
+    # Windows deliberately has no browser-native-messaging sidecar.
+    # The build-only config clears externalBin, without changing macOS/Linux
+    # packaging or the shared Tauri configuration.
+    $OfflineTauriConfig = Join-Path $Root "src-tauri/tauri.windows-offline.conf.json"
+    if (-not (Test-Path -LiteralPath $OfflineTauriConfig -PathType Leaf)) {
+        throw "Missing Windows offline Tauri config: $OfflineTauriConfig"
     }
-
-    $SidecarDirectory = Join-Path $Root "onekeepass-proxy/binaries"
-    New-Item -Path $SidecarDirectory -ItemType Directory -Force | Out-Null
-    Copy-Item -LiteralPath $SidecarBuilt -Destination (
-        Join-Path $SidecarDirectory "onekeepass-proxy-$Target.exe"
-    ) -Force
 
     Write-Host "==> Validating the desktop Cargo.lock and fetching pinned dependencies"
     Invoke-Checked "cargo.exe" @(
@@ -86,7 +78,8 @@ try {
 
     Write-Host "==> Building unbundled Tauri Windows executable"
     Invoke-Checked "yarn.cmd" @(
-        "tauri", "build", "--no-bundle", "--target", $Target
+        "tauri", "build", "--no-bundle", "--target", $Target,
+        "--config", $OfflineTauriConfig
     )
 
     $Exe = Join-Path $Root "src-tauri/target/$Target/release/OneKeePass.exe"
