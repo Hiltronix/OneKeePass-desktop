@@ -1,5 +1,7 @@
 name: Hiltronix Windows x64 portable ZIP
 
+# CI validation of the patched shared core after the branch Cargo.lock was resolved.
+
 on:
   workflow_dispatch:
   push:
