@@ -217,7 +217,7 @@ fn build_database_menus<R: Runtime>(
             app_handle,
             OPEN_REMOTE,
             system_menu_translation.sub_menu(OPEN_REMOTE, "Open Remote..."),
-            true,
+            !cfg!(target_os = "windows"),
             Some("Shift+CmdOrControl+O"),
         )?,
         &MenuItem::with_id(
@@ -610,7 +610,7 @@ pub fn menu_action_requested<R: Runtime>(request: MenuActionRequest, app_handle:
         | MERGE_DATABASE
         | MERGE_OPENED_DATABASES
         | CHECK_REMOTE_CHANGES => {
-            toggle_enable_disable(app_handle, MAIN_MENU_DATABASE, menu_id, menu_enabled);
+            toggle_enable_disable(app_handle, MAIN_MENU_DATABASE, menu_id, menu_enabled && !(cfg!(target_os = "windows") && menu_id == CHECK_REMOTE_CHANGES));
         }
         EDIT_ENTRY | NEW_ENTRY | CLONE_ENTRY | DELETE_ENTRY | COPY_USERNAME | COPY_PASSWORD
         | COPY_URL | OPEN_URL | COPY_TOTP => {

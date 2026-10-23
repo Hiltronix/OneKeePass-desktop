@@ -1447,6 +1447,7 @@ fn spawn_blocking_join_err(e: tokio::task::JoinError) -> String {
 pub async fn rs_connect_and_retrieve_root_dir(
     rs_operation_type: RemoteStorageOperationType,
 ) -> Result<ConnectStatus> {
+    crate::remote_storage::ensure_remote_network_allowed()?;
     Ok(tokio::task::spawn_blocking(move || {
         rs_operation_type.connect_and_retrieve_root_dir()
     })
@@ -1458,6 +1459,7 @@ pub async fn rs_connect_and_retrieve_root_dir(
 pub async fn rs_connect_by_id_and_retrieve_root_dir(
     rs_operation_type: RemoteStorageOperationType,
 ) -> Result<ConnectStatus> {
+    crate::remote_storage::ensure_remote_network_allowed()?;
     Ok(tokio::task::spawn_blocking(move || {
         rs_operation_type.connect_by_id_and_retrieve_root_dir()
     })
@@ -1469,6 +1471,7 @@ pub async fn rs_connect_by_id_and_retrieve_root_dir(
 pub async fn rs_list_sub_dir(
     rs_operation_type: RemoteStorageOperationType,
 ) -> Result<ServerDirEntry> {
+    crate::remote_storage::ensure_remote_network_allowed()?;
     Ok(tokio::task::spawn_blocking(move || rs_operation_type.list_sub_dir())
         .await
         .map_err(spawn_blocking_join_err)??)

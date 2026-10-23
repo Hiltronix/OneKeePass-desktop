@@ -61,6 +61,9 @@ impl BrowserExtSupport {
     // folder via NSOpenPanel and the bookmark has already been stored.
     // Also (re)starts the proxy handler on success.
     pub(crate) fn write_browser_manifest_for(&mut self, browser_id: &str) -> Result<()> {
+        #[cfg(target_os = "windows")]
+        return Err(error::Error::UnexpectedError("Browser integration is disabled in this Hiltronix Windows build".into()));
+
         match browser_id {
             FIREFOX => {
                 self.write_manifest_with_scope(FIREFOX, FirefoxNativeMessagingConfig::write)?;
@@ -150,6 +153,9 @@ impl BrowserExtSupport {
 
     // Called when the app level "Browser extension support" settings are changed
     pub(super) fn update(&mut self, other: BrowserExtSupportData) -> Result<()> {
+        #[cfg(target_os = "windows")]
+        return Err(error::Error::UnexpectedError("Browser integration is disabled in this Hiltronix Windows build".into()));
+
         log::debug!("BrowserExtSupport update is called - existing allowed_browsers {:?}, new allowed_browsers {:?}",
             &self.allowed_browsers, &other.allowed_browsers, );
 
@@ -243,6 +249,9 @@ impl BrowserExtSupport {
 
     // Called onetime to start the extension proxy listener from app side when the app starts
     pub(crate) fn start_proxy_handling_service(&self) {
+        #[cfg(target_os = "windows")]
+        return;
+
         // Assuming 'allowed_browsers' will have one or more  browser ids
         if self.extension_use_enabled {
             // Here we are assuming the native messsage config file is already written/copied

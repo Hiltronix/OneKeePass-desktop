@@ -116,6 +116,7 @@ pub(crate) fn init_app(app: &App) {
     onekeepass_core::async_service::start_runtime();
 
     // Start the browser extennion proxy listener if required
+    #[cfg(not(target_os = "windows"))]
     state.start_ext_proxy_service();
 
     // Start the SSH agent service if the user enabled it on a prior run

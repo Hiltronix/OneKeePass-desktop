@@ -103,7 +103,6 @@ try {
     New-Item -Path $Stage -ItemType Directory | Out-Null
 
     Copy-Item -LiteralPath $Exe -Destination (Join-Path $Stage "OneKeePass.exe")
-    Copy-Item -LiteralPath $SidecarBuilt -Destination (Join-Path $Stage "onekeepass-proxy.exe")
     Copy-Item -LiteralPath (Join-Path $Root "src-tauri/portable/README.txt") -Destination $Stage
 
     # Maps bundle.resources ../resources/public/... to the path Tauri resolves:
@@ -131,7 +130,7 @@ try {
     try {
         $Names = @($Archive.Entries | ForEach-Object { $_.FullName })
         foreach ($Required in @(
-            ".portable", "OneKeePass.exe", "onekeepass-proxy.exe",
+            ".portable", "OneKeePass.exe",
             "_up_/resources/public/icons/", "_up_/resources/public/translations/",
             "_up_/resources/public/wordlists/"
         )) {

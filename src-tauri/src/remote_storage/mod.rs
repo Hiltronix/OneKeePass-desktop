@@ -35,6 +35,21 @@ use onekeepass_core::remote_storage::storage_service::{
     RemoteStorageTypeConfig,
 };
 
+// Block the Windows edition before SFTP/WebDAV transport calls.
+pub(crate) fn ensure_remote_network_allowed() -> Result<()> {
+    #[cfg(target_os = "windows")]
+    {
+        Err(error::Error::UnexpectedError(
+            "Remote storage is disabled in this Hiltronix Windows build".into(),
+        ))
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Ok(())
+    }
+}
+
 // True when the remote connection referenced by db_key resolves to a
 // REMOTE_CONNECTION_SFTP / _WEBDAV entry in a currently-open kdbx db.
 // Ad-hoc form-based connections (no backing entry) return false. Used to gate
@@ -95,6 +110,7 @@ pub(crate) fn rs_read_kdbx(
     password: Option<&str>,
     key_file_name: Option<&str>,
 ) -> Result<(KdbxLoaded, Option<i64>)> {
+    ensure_remote_network_allowed()?;
     let rs_operation_type = rs_type_from_db_key(db_file_name)?;
 
     rs_operation_type.connect_by_id().map_err(|e| {
@@ -129,6 +145,7 @@ pub(crate) fn rs_save_kdbx(
     recorded_mtime: Option<i64>,
     backup_file_name: Option<&str>,
 ) -> Result<(KdbxSaved, Option<i64>)> {
+    ensure_remote_network_allowed()?;
     let rs_operation_type = rs_type_from_db_key(db_key)?;
 
     rs_operation_type.connect_by_id().map_err(|e| {
@@ -158,6 +175,7 @@ pub(crate) fn rs_create_kdbx(
     backup_file_name: Option<&str>,
 ) -> Result<(KdbxLoaded, String, Option<i64>)> {
     let db_key = new_db.database_file_name.clone();
+    ensure_remote_network_allowed()?;
     let rs_operation_type = rs_type_from_db_key(&db_key)?;
 
     if rs_operation_type.file_metadata().is_ok() {
@@ -241,6 +259,7 @@ fn is_remote_file_modified(
 // whether the remote file diverged from what we last saw. The recorded
 // value lives in AppState; the Tauri command does the compare.
 pub(crate) fn rs_current_remote_mtime(db_key: &str) -> Result<Option<i64>> {
+    ensure_remote_network_allowed()?;
     let rs_operation_type = rs_type_from_db_key(db_key)?;
 
     rs_operation_type.connect_by_id().map_err(|e| {
@@ -261,6 +280,7 @@ pub(crate) fn rs_current_remote_mtime(db_key: &str) -> Result<Option<i64>> {
 // remote file's mtime at fetch time (so the caller can refresh
 // AppState.remote_mtime and avoid an immediate re-prompt).
 pub(crate) fn rs_merge_with_remote(db_key: &str) -> Result<(MergeResult, Option<i64>)> {
+    ensure_remote_network_allowed()?;
     let rs_operation_type = rs_type_from_db_key(db_key)?;
 
     rs_operation_type.connect_by_id().map_err(|e| {
