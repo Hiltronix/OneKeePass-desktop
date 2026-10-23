@@ -36,14 +36,24 @@
           [mui-typography {:variant "body2"} (str (str/capitalize os-name) " " os-version)]]
          [mui-divider {:sx {:my 1}}]
          [mui-typography {:variant "body2"} (tr-dlg-text "aboutDescription")]
+         [mui-typography {:variant "body2"}
+          "Hiltronix edition: a modified OneKeePass desktop build for privacy-conscious offline use. " 
+          "Changes and support for this fork are maintained by Hiltronix; the original OneKeePass developers created the application."]
          [mui-divider {:sx {:my 1}}]
          [mui-stack {:direction "row" :spacing 1 :alignItems "center"}
           [mui-typography {:variant "subtitle2" :sx {:min-width "120px"}} (tr-l "github")]
           [mui-link {:component "button"
                      :variant "body2"
                      :sx {:display "flex" :alignItems "center" :gap "4px"}
+                     :onClick #(cmn-events/open-url "https://github.com/Hiltronix/OneKeePass-desktop")}
+           "Hiltronix source fork"
+           [mui-icon-launch {:sx {:fontSize "14px"}}]]]
+         [mui-stack {:direction "row" :spacing 1 :alignItems "center"}
+          [mui-typography {:variant "subtitle2" :sx {:min-width "120px"}} "Original project"]
+          [mui-link {:component "button"
+                     :variant "body2"
                      :onClick #(cmn-events/open-url "https://github.com/OneKeePass/desktop")}
-           "OneKeePass Desktop"
+           "OneKeePass developers"
            [mui-icon-launch {:sx {:fontSize "14px"}}]]]
          [mui-divider {:sx {:my 1}}]
          [mui-typography {:variant "caption" :sx {:color "text.secondary"}}
