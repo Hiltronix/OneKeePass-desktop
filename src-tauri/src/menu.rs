@@ -119,7 +119,6 @@ pub(crate) fn build_menus<R: Runtime>(app_handle: &AppHandle<R>) -> Result<(), t
 
     #[cfg(not(target_os = "macos"))]
     let app_submenu = SubmenuBuilder::with_id(app_handle, app_name, app_name)
-        .separator()
         .item(&app_settings)
         .separator()
         .item(&quit)
