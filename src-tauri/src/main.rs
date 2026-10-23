@@ -26,7 +26,6 @@ mod remote_storage;
 mod sandbox;
 mod ssh_agent;
 mod translation;
-#[cfg(not(feature = "mas-build"))]
 mod window_behavior;
 // mod callback_service_provider;
 
