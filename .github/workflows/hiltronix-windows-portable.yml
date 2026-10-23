@@ -1,0 +1,92 @@
+name: Hiltronix Windows x64 portable ZIP
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/hiltronix-windows-portable.yml'
+      - 'scripts/Build-WindowsPortable.ps1'
+      - 'src-tauri/**'
+      - 'src-cljs/**'
+      - 'src-js/**'
+      - 'onekeepass-proxy/**'
+      - 'resources/**'
+      - 'package.json'
+      - 'yarn.lock'
+
+permissions:
+  contents: read
+
+jobs:
+  portable-x64:
+    name: Build Windows portable edition
+    runs-on: windows-2022
+    timeout-minutes: 180
+
+    steps:
+      - name: Check out Hiltronix desktop source
+        uses: actions/checkout@v4
+
+      - name: Configure Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Yarn Classic
+        shell: pwsh
+        run: npm install --global yarn@1.22.22
+
+      - name: Configure Java for ClojureScript
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Configure Rust/MSVC target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Configure Visual Studio compiler environment
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Cache Rust build intermediates
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            src-tauri
+            onekeepass-proxy
+          key: hiltronix-windows-portable
+
+      - name: Compile and package portable ZIP
+        shell: pwsh
+        run: .\scripts\Build-WindowsPortable.ps1
+
+      - name: Verify portable ZIP and SHA256 files
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $zips = @(Get-ChildItem dist -Filter '*Windows_x64_Portable.zip' -File)
+          if ($zips.Count -ne 1) { throw "Expected exactly one Windows portable ZIP." }
+          $zip = $zips[0]
+          $sidecar = Join-Path $zip.DirectoryName ($zip.Name + ".sha256")
+          if (-not (Test-Path $sidecar -PathType Leaf)) {
+            throw "Missing ZIP SHA256 manifest: $sidecar"
+          }
+          $hash = (Get-FileHash $zip.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if (-not ((Get-Content -Raw $sidecar).Contains($hash))) {
+            throw "Portable ZIP SHA256 mismatch."
+          }
+          Write-Host "Portable ZIP: $($zip.FullName)"
+          Write-Host "SHA256: $hash"
+
+      - name: Upload Windows portable ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: Hiltronix-Windows-x64-Portable-${{ github.run_number }}
+          path: |
+            dist/*Windows_x64_Portable.zip
+            dist/*Windows_x64_Portable.zip.sha256
+          if-no-files-found: error
+          retention-days: 14
