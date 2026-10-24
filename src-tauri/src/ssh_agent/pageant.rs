@@ -247,9 +247,19 @@ unsafe fn handle_copydata(lparam: LPARAM) -> LRESULT {
         return 0;
     }
 
-    // cds.lpData is a NUL-terminated ASCII string: the name of the file mapping
-    // the client created. Open it for read/write (we read the request, write the
-    // response into the same mapping).
+    // WM_COPYDATA only guarantees cbData bytes. OpenFileMappingA expects a
+    // NUL-terminated name; validate that termination lies inside the supplied
+    // buffer before passing it to the Win32 string API.
+    let name_len = cds.cbData as usize;
+    if name_len == 0 || name_len > 256 {
+        return 0;
+    }
+    let name = std::slice::from_raw_parts(cds.lpData as *const u8, name_len);
+    if name[name_len - 1] != 0 || name[..name_len - 1].contains(&0) {
+        return 0;
+    }
+
+    // Open for read/write; the owner-SID check below gates signing requests.
     let mapping = OpenFileMappingA(
         FILE_MAP_WRITE | READ_CONTROL_ACCESS,
         0,
@@ -276,7 +286,10 @@ unsafe fn serve_mapping(mapping: HANDLE) -> LRESULT {
 
     // MapViewOfFile returns a MEMORY_MAPPED_VIEW_ADDRESS wrapping the base
     // pointer; UnmapViewOfFile takes the same wrapper back.
-    let view = MapViewOfFile(mapping, FILE_MAP_WRITE, 0, 0, 0);
+    // Demand the full Pageant request/response buffer. Without this size a
+    // malicious same-user client could supply a too-small mapping and trigger
+    // an out-of-bounds read/write after claiming a longer framed message.
+    let view = MapViewOfFile(mapping, FILE_MAP_WRITE, 0, 0, AGENT_MAX_MSGLEN);
     if view.Value.is_null() {
         return 0;
     }

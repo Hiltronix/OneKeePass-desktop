@@ -46,7 +46,8 @@ fn to_wide(s: &str) -> Vec<u16> {
 // Stores `data` under `target` as a generic credential. The blob is hex-encoded,
 // mirroring the macOS Keychain path.
 fn cred_write(target: &str, data: &[u8]) -> windows::core::Result<()> {
-    let blob = hex::encode(data).into_bytes();
+    // Wrap the hex-encoded key in a wiping buffer, including on error paths.
+    let blob = SecVec::new(hex::encode(data).into_bytes());
     let mut target_w = to_wide(target);
 
     let credential = CREDENTIALW {
@@ -55,8 +56,8 @@ fn cred_write(target: &str, data: &[u8]) -> windows::core::Result<()> {
         TargetName: PWSTR(target_w.as_mut_ptr()),
         Comment: PWSTR::null(),
         LastWritten: FILETIME::default(),
-        CredentialBlobSize: blob.len() as u32,
-        CredentialBlob: blob.as_ptr() as *mut u8,
+        CredentialBlobSize: blob.unsecure().len() as u32,
+        CredentialBlob: blob.unsecure().as_ptr() as *mut u8,
         // SESSION: cleared on logoff. Keeps session-only semantics and avoids
         // leaving the per-session enc key at rest (not LOCAL_MACHINE/ENTERPRISE).
         Persist: CRED_PERSIST_SESSION,
@@ -97,18 +98,20 @@ fn cred_delete(target: &str) -> windows::core::Result<()> {
 impl kp_service::KeyStoreService for KeyStoreServiceImpl {
     fn store_key(&mut self, db_key: &str, data: Vec<u8>) -> kp_service::Result<()> {
         let target = formatted_key(db_key);
-        match cred_write(&target, &data) {
+        // Avoid dropping the supplied session key as an ordinary, non-wiping Vec.
+        let secret = SecVec::new(data);
+        match cred_write(&target, secret.unsecure()) {
             Ok(()) => {
                 debug!("Enc key stored in Windows Credential Manager");
                 Ok(())
             }
             Err(e) => {
-                // Fallback: keep the enc key locally, same as the macOS impl.
+                // Preserve the already-wrapped key for the in-memory fallback.
                 error!(
                     "CredWriteW failed ({:?}); falling back to in-memory store",
                     e
                 );
-                self.store.insert(db_key.into(), SecVec::new(data));
+                self.store.insert(db_key.into(), secret);
                 Ok(())
             }
         }
@@ -122,7 +125,7 @@ impl kp_service::KeyStoreService for KeyStoreServiceImpl {
 
         let target = formatted_key(db_key);
         match cred_read(&target) {
-            Ok(hex_bytes) => match hex::decode(&hex_bytes) {
+            Ok(hex_bytes) => match hex::decode(SecVec::new(hex_bytes).unsecure()) {
                 Ok(v) => Some(v),
                 Err(e) => {
                     error!("Hex decoding of credential blob failed: {}", e);
@@ -159,22 +162,23 @@ impl kp_service::KeyStoreService for KeyStoreServiceImpl {
         let source = formatted_key(source_db_key);
         let target = formatted_key(target_db_key);
 
-        let hex_bytes = cred_read(&source).map_err(|e| {
+        let hex_bytes = SecVec::new(cred_read(&source).map_err(|e| {
             onekeepass_core::error::Error::UnexpectedError(format!(
                 "Copying key failed reading source credential: {:?}",
                 e
             ))
-        })?;
+        })?);
 
-        // cred_read returns the hex-encoded blob; decode before cred_write re-encodes.
-        let raw = hex::decode(&hex_bytes).map_err(|e| {
+        // Wipe both intermediate representations after duplicating this
+        // ephemeral session key in Windows Credential Manager.
+        let raw = SecVec::new(hex::decode(hex_bytes.unsecure()).map_err(|e| {
             onekeepass_core::error::Error::UnexpectedError(format!(
                 "Copying key failed decoding source credential: {}",
                 e
             ))
-        })?;
+        })?);
 
-        cred_write(&target, &raw).map_err(|e| {
+        cred_write(&target, raw.unsecure()).map_err(|e| {
             onekeepass_core::error::Error::UnexpectedError(format!(
                 "Copying key failed writing target credential: {:?}",
                 e
