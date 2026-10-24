@@ -53,17 +53,21 @@ impl Session for AgentSession {
         );
 
         // Honor "Require Confirmation": prompt the user and bail on deny/timeout.
+        // Also bind the approval to the current store generation so relocking,
+        // reloading or restarting the agent cannot reuse a stale approval.
+        let mut confirmed = false;
         if info.require_confirmation {
             let allowed = super::request_confirmation(info.comment.clone(), info.fingerprint).await;
             if !allowed {
-                log::info!("SSH agent: sign request denied for '{}'", info.comment);
+                log::info!("SSH agent: sign request denied");
                 return Err(AgentError::Failure);
             }
+            confirmed = true;
         }
 
-        // Re-acquire the lock and sign. Re-finding the key also correctly fails
-        // if the database was locked/closed while the dialog was open.
+        // Recheck the generation and current key confirmation policy under the
+        // lock. Never authorize a sign using metadata from a replaced identity.
         let store = self.store.read().unwrap();
-        store.sign(&requested, &request.data, request.flags)
+        store.sign(&requested, &request.data, request.flags, info.generation, confirmed)
     }
 }

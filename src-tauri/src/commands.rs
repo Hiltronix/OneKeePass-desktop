@@ -774,9 +774,42 @@ pub(crate) async fn save_attachment_as_temp_file(
     data_hash_str: &str,
 ) -> Result<String> {
     let data_hash = kp_service::service_util::parse_attachment_hash(data_hash_str)?;
-    Ok(kp_service::save_attachment_as_temp_file(
-        db_key, name, &data_hash,
-    )?)
+    // The shared core's generic temp-save API uses the attachment's original
+    // name as a path component. Never pass a KDBX-controlled name to File::create:
+    // an absolute path or ".." could overwrite unrelated user files, and a
+    // predictable name could collide with an earlier decrypted attachment.
+    // Generate a fresh, exclusive filename but retain a safe extension so the
+    // external viewer can recognize the file format.
+    let safe_name = name.rsplit(|ch| ch == '/' || ch == '\\').next().unwrap_or("");
+    let extension = safe_name.rsplit_once('.')
+        .map(|(_, ext)| ext)
+        .filter(|ext| !ext.is_empty() && ext.len() <= 16
+            && ext.bytes().all(|c| c.is_ascii_alphanumeric()));
+    let cache = std::env::temp_dir().join("okp_cache");
+    std::fs::create_dir_all(&cache).map_err(|e| format!("Attachment temp directory: {e}"))?;
+
+    let file_name = match extension {
+        Some(ext) => format!("okp-{}.{}", Uuid::new_v4(), ext),
+        None => format!("okp-{}", Uuid::new_v4()),
+    };
+    let path = cache.join(file_name);
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&path)
+        .map_err(|e| format!("Create attachment temp file: {e}"))?;
+
+    // Use the core's existing attachment writer without its unsafe filename
+    // construction. Remove partial output if decoding or writing fails.
+    let result = kp_service::save_attachment_to_writter(db_key, &data_hash, &mut file);
+    drop(file);
+    if let Err(e) = result {
+        let _ = std::fs::remove_file(&path);
+        return Err(e.into());
+    }
+    path.to_str()
+        .map(str::to_owned)
+        .ok_or_else(|| "Attachment temp path is not UTF-8".to_string())
 }
 
 #[command]

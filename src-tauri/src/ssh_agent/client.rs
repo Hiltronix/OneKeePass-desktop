@@ -180,8 +180,7 @@ impl ClientRuntime {
                     }
                     Err(e) => {
                         log::warn!(
-                            "SSH agent client mode: failed to add SSH Key entry '{}': {}",
-                            src.title,
+                            "SSH agent client mode: failed to add SSH Key entry: {}",
                             e
                         );
                         if first_error.is_none() {
@@ -191,8 +190,7 @@ impl ClientRuntime {
                 },
                 Err(e) => {
                     log::warn!(
-                        "SSH agent client mode: skipping SSH Key entry '{}': {}",
-                        src.title,
+                        "SSH agent client mode: skipping SSH Key entry: {}",
                         e
                     );
                     if first_error.is_none() {

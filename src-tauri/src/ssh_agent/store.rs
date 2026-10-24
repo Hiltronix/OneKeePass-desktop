@@ -51,6 +51,7 @@ pub(crate) struct ConfirmInfo {
     pub require_confirmation: bool,
     pub comment: String,
     pub fingerprint: String,
+    pub generation: u64,
 }
 
 // Shared decoded representation used by embedded Agent Mode and external Client
@@ -78,7 +79,10 @@ impl StoredIdentity {
     // when the stored public key contradicts the private key.
     fn from_source(src: &SshAgentKeySource) -> Result<Self, String> {
         let decoded = decode_identity(src)?;
-        let expires_at = decoded.lifetime.map(|d| Instant::now() + d);
+        let expires_at = decoded.lifetime
+            .map(|d| Instant::now().checked_add(d)
+                .ok_or_else(|| "Agent Lifetime exceeds the supported range".to_string()))
+            .transpose()?;
 
         Ok(Self {
             db_key: decoded.db_key,
@@ -157,9 +161,12 @@ pub(crate) fn decode_identity(src: &SshAgentKeySource) -> Result<DecodedIdentity
         src.title.clone()
     };
 
-    // An unparseable but non-empty lifetime is treated as "no expiry" so a typo
-    // never silently makes a key unloadable; the parse warns instead.
-    let lifetime = src.agent_lifetime.as_deref().and_then(parse_lifetime);
+    // Invalid lifetimes must not silently become unlimited authorization.
+    // An empty or zero value explicitly requests the no-expiry behavior.
+    let lifetime = src.agent_lifetime.as_deref()
+        .map(parse_lifetime)
+        .transpose()?
+        .flatten();
 
     Ok(DecodedIdentity {
         db_key: src.db_key.clone(),
@@ -171,25 +178,23 @@ pub(crate) fn decode_identity(src: &SshAgentKeySource) -> Result<DecodedIdentity
     })
 }
 
-// Parses an "Agent Lifetime" field into a duration. The desktop entry form
-// stores this as a whole number of seconds picked from a duration dropdown
-// ("3600", "86400", ...), so a bare integer is the only expected form. Returns
-// None for an empty or zero value (the key never expires); a non-empty value
-// that is not a positive integer is logged and treated as no-expiry so a stray
-// value never silently shortens a key's lifetime.
-fn parse_lifetime(input: &str) -> Option<Duration> {
+// Parses seconds chosen in the desktop entry form. Empty/zero explicitly means
+// no lifetime; malformed or unreasonably large values reject the key instead of
+// silently allowing indefinite signing.
+fn parse_lifetime(input: &str) -> Result<Option<Duration>, String> {
     let s = input.trim();
-    if s.is_empty() {
-        return None;
+    if s.is_empty() || s == "0" {
+        return Ok(None);
     }
-
-    match s.parse::<u64>() {
-        Ok(secs) => (secs > 0).then(|| Duration::from_secs(secs)),
-        Err(_) => {
-            log::warn!("SSH agent: ignoring non-numeric Agent Lifetime '{input}'");
-            None
-        }
+    let secs = s.parse::<u64>()
+        .map_err(|_| "Invalid Agent Lifetime; expected a number of seconds".to_string())?;
+    if secs == 0 {
+        return Ok(None);
     }
+    if secs > u32::MAX as u64 {
+        return Err("Agent Lifetime exceeds maximum supported seconds".into());
+    }
+    Ok(Some(Duration::from_secs(secs)))
 }
 
 // Accepts the key formats stored by SSH Key entries and normalizes them to the
@@ -298,12 +303,15 @@ fn sign_rsa_with_flags(key: &PrivateKey, msg: &[u8], flags: u32) -> Result<Signa
 // listing and de-duplicated by public-key fingerprint when advertised.
 pub(crate) struct SshAgentStore {
     identities: Vec<StoredIdentity>,
+    // Bumped whenever the key set changes; invalidates in-flight confirmations.
+    generation: u64,
 }
 
 impl SshAgentStore {
     pub(crate) fn new() -> Self {
         Self {
             identities: Vec::new(),
+            generation: 0,
         }
     }
 
@@ -316,6 +324,7 @@ impl SshAgentStore {
 
     pub(crate) fn clear(&mut self) {
         // Dropping each StoredIdentity zeroizes its private key.
+        self.generation = self.generation.wrapping_add(1);
         self.identities.clear();
     }
 
@@ -325,22 +334,29 @@ impl SshAgentStore {
     pub(crate) fn prune_expired(&mut self) -> usize {
         let before = self.identities.len();
         self.identities.retain(|id| !id.is_expired());
-        before - self.identities.len()
+        let removed = before - self.identities.len();
+        if removed > 0 {
+            self.generation = self.generation.wrapping_add(1);
+        }
+        removed
     }
 
     // Replaces every identity drawn from `db_key` with a freshly decoded slice.
     // Sources that fail to decode are logged and skipped.
     pub(crate) fn replace_db(&mut self, db_key: &str, sources: Vec<SshAgentKeySource>) {
+        self.generation = self.generation.wrapping_add(1);
         self.identities.retain(|id| id.db_key != db_key);
         self.decode_into(sources);
     }
 
     pub(crate) fn remove_db(&mut self, db_key: &str) {
+        self.generation = self.generation.wrapping_add(1);
         self.identities.retain(|id| id.db_key != db_key);
     }
 
     // Clears the store and rebuilds it from sources across all open databases.
     pub(crate) fn set_all(&mut self, sources: Vec<SshAgentKeySource>) {
+        self.generation = self.generation.wrapping_add(1);
         self.identities.clear();
         self.decode_into(sources);
     }
@@ -350,16 +366,14 @@ impl SshAgentStore {
             match StoredIdentity::from_source(&src) {
                 Ok(id) => {
                     log::debug!(
-                        "SSH agent: loaded identity '{}' ({})",
-                        id.comment,
+                        "SSH agent: loaded identity ({})",
                         id.fingerprint()
                     );
                     self.identities.push(id);
                 }
                 Err(e) => {
                     log::warn!(
-                        "SSH agent: skipping SSH Key entry '{}': {}",
-                        src.title,
+                        "SSH agent: skipping invalid SSH Key entry: {}",
                         e
                     );
                 }
@@ -397,6 +411,7 @@ impl SshAgentStore {
                 require_confirmation: id.require_confirmation,
                 comment: id.comment.clone(),
                 fingerprint: id.fingerprint(),
+                generation: self.generation,
             })
     }
 
@@ -407,15 +422,25 @@ impl SshAgentStore {
         requested: &KeyData,
         data: &[u8],
         flags: u32,
+        expected_generation: u64,
+        confirmation_granted: bool,
     ) -> Result<Signature, AgentError> {
+        if self.generation != expected_generation {
+            // An in-flight confirmation must not authorize a replacement key,
+            // even when the public key bytes remain identical.
+            return Err(AgentError::Failure);
+        }
         let id = self
             .identities
             .iter()
             .find(|id| !id.is_expired() && &id.public_key_data == requested)
             .ok_or(AgentError::Failure)?;
+        if id.require_confirmation && !confirmation_granted {
+            return Err(AgentError::Failure);
+        }
 
         id.sign(data, flags).map_err(|e| {
-            log::error!("SSH agent: signing failed for '{}': {}", id.comment, e);
+            log::error!("SSH agent: signing failed: {}", e);
             AgentError::Failure
         })
     }
@@ -429,21 +454,36 @@ mod tests {
     #[test]
     fn lifetime_seconds() {
         // The duration picker stores whole seconds.
-        assert_eq!(parse_lifetime("3600"), Some(Duration::from_secs(3600)));
-        assert_eq!(parse_lifetime("900"), Some(Duration::from_secs(900)));
-        assert_eq!(parse_lifetime("604800"), Some(Duration::from_secs(604_800)));
-        assert_eq!(parse_lifetime("  90 "), Some(Duration::from_secs(90)));
+        assert_eq!(parse_lifetime("3600"), Ok(Some(Duration::from_secs(3600))));
+        assert_eq!(parse_lifetime("900"), Ok(Some(Duration::from_secs(900))));
+        assert_eq!(parse_lifetime("604800"), Ok(Some(Duration::from_secs(604_800))));
+        assert_eq!(parse_lifetime("  90 "), Ok(Some(Duration::from_secs(90))));
+    }
+
+    #[test]
+    fn key_store_generation_changes_on_clear_and_reload() {
+        use super::SshAgentStore;
+        let mut store = SshAgentStore::new();
+        let initial = store.generation;
+        store.clear();
+        assert_ne!(store.generation, initial);
+        let next = store.generation;
+        store.set_all(vec![]);
+        assert_ne!(store.generation, next);
+        let next = store.generation;
+        store.remove_db("test-db");
+        assert_ne!(store.generation, next);
     }
 
     #[test]
     fn lifetime_none_or_invalid() {
         // Empty / zero -> no expiry.
-        assert_eq!(parse_lifetime(""), None);
-        assert_eq!(parse_lifetime("   "), None);
-        assert_eq!(parse_lifetime("0"), None);
+        assert_eq!(parse_lifetime(""), Ok(None));
+        assert_eq!(parse_lifetime("   "), Ok(None));
+        assert_eq!(parse_lifetime("0"), Ok(None));
         // Non-numeric -> no expiry (logged).
-        assert_eq!(parse_lifetime("abc"), None);
-        assert_eq!(parse_lifetime("30m"), None);
-        assert_eq!(parse_lifetime("-5"), None);
+        assert!(parse_lifetime("abc").is_err());
+        assert!(parse_lifetime("30m").is_err());
+        assert!(parse_lifetime("-5").is_err());
     }
 }
