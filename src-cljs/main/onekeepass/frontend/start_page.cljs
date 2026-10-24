@@ -4,6 +4,7 @@
    [onekeepass.frontend.constants :as const]
    [onekeepass.frontend.app-settings :refer [app-settings-dialog-main]]
    [onekeepass.frontend.browser-integration :as browser-integration]
+   [onekeepass.frontend.build-revision :as build-revision]
    [onekeepass.frontend.ssh-agent :as ssh-agent]
    [onekeepass.frontend.check-for-updates :as check-updates]
    [onekeepass.frontend.common-components :as cc :refer [message-dialog]]
@@ -119,6 +120,10 @@
 
        [mui-stack {:direction "row" :align-self "center"} ;;:sx {:mt "25%"}
         [mui-typography {:variant "h7" :sx {:color "text.primary"}} app-version #_(str "Version " app-version)]]
+
+       [mui-stack {:direction "row" :align-self "center"}
+        [mui-typography {:variant "body2" :sx {:color "text.secondary"}}
+         (str "Revision: " build-revision/revision)]]
 
        (when @(cmn-events/is-dev-mode?)
          [mui-stack {:direction "row" :align-self "center"} ;;:sx {:mt "25%"}

@@ -1,6 +1,6 @@
 # Hiltronix OneKeePass security audit (Windows desktop)
 
-Audit date: 2026-10-23. Source revision: `2026-10-23-11` (desktop v0.27.0).
+Audit date: 2026-10-23. Source revision: `2026-10-23-12` (desktop v0.27.0).
 Scope: Hiltronix Windows x64 portable desktop edition plus the pinned
 Hiltronix `onekeepass-core` source at `a4f0f2b74d893f3a4b8b5052c960e2497177fd2f` (quick-xml 0.41 branch-tested commit, now reachable from core main).
 Android is **not** covered by this Windows-only audit.
@@ -143,3 +143,8 @@ This is **defense in depth, not a formal network sandbox**: browser switches can
 Validation required: verify OneKeePass can launch, unlock/edit/save a disposable KDBX, import local icons, use SSH Agent Service if applicable, and open entry URLs in the external browser. On the test PC inspect the WebView2 process command line for the arguments and capture external WFP traffic with exact OneKeePass/WebView2 PID ancestry. **Do not claim confirmed zero outbound connections until runtime tests pass**.
 
 Refs: https://v2.tauri.app/reference/config/#windowconfig ; https://learn.microsoft.com/en-us/microsoft-edge/webview2/reference/winrt/microsoft_web_webview2_core/corewebview2environmentoptions
+
+
+## Welcome-screen revision display (2026-10-23; revision 2026-10-23-12)
+
+The initial Welcome/start screen displays a centered `Revision: <value>` directly beneath the semantic application version `0.27.0`. Both this label and Help > About use the **same** value from `src-cljs/main/onekeepass/frontend/build_revision.cljs`, preventing diverging hard-coded UI revision strings. Functional acceptance: verify the Welcome/start screen and Help > About both show `2026-10-23-12` after the Windows portable build; WebView2 restrictions from revision 11 are unchanged.
