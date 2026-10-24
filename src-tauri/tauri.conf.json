@@ -70,7 +70,8 @@
         "center": true,
         "resizable": true,
         "fullscreen": false,
-        "useHttpsScheme": true
+        "useHttpsScheme": true,
+        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-background-networking --disable-component-update --disable-sync --proxy-server=http://127.0.0.1:9"
       }
     ]
   }

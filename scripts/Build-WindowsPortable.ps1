@@ -35,6 +35,13 @@ foreach ($Program in @("cargo.exe", "rustc.exe", "yarn.cmd", "java.exe")) {
 
 $Configuration = Get-Content -Raw (Join-Path $Root "src-tauri/tauri.conf.json") | ConvertFrom-Json
 $Version = $Configuration.version
+$BrowserArgs = $Configuration.app.windows[0].additionalBrowserArgs
+# Ensure the release continues to carry the per-application WebView2 network restrictions.
+foreach ($Flag in @("--disable-background-networking", "--disable-component-update", "--disable-sync", "--proxy-server=http://127.0.0.1:9")) {
+    if (-not $BrowserArgs -or -not $BrowserArgs.Contains($Flag)) {
+        throw "Missing Windows WebView2 restriction: $Flag"
+    }
+}
 if (-not $Version -or $Version -notmatch '^\d+\.\d+\.\d+$') {
     throw "Unexpected Tauri version: $Version"
 }

@@ -1,6 +1,6 @@
 # Hiltronix OneKeePass security audit (Windows desktop)
 
-Audit date: 2026-10-23. Source revision: `2026-10-23-10` (desktop v0.27.0).
+Audit date: 2026-10-23. Source revision: `2026-10-23-11` (desktop v0.27.0).
 Scope: Hiltronix Windows x64 portable desktop edition plus the pinned
 Hiltronix `onekeepass-core` source at `a4f0f2b74d893f3a4b8b5052c960e2497177fd2f` (quick-xml 0.41 branch-tested commit, now reachable from core main).
 Android is **not** covered by this Windows-only audit.
@@ -128,3 +128,18 @@ After eliminating webpack and its transitive closure, only `ws 8.20.0` and `yaml
 - **Desktop CI:** [Windows portable run #39993374728](https://github.com/Hiltronix/OneKeePass-desktop/actions/runs/39993374728) passed compilation, archive hash checking and artifact upload for the patched core.
 - **Final dependency scan:** [run #39993374809](https://github.com/Hiltronix/OneKeePass-desktop/actions/runs/39993374809) found **4 remaining Rust advisory/package records**: 2 for `quick-xml 0.39.4` from Linux Wayland tooling, and 2 RSA timing advisory records. Yarn reported 0 vulnerabilities. Other unmaintained, unsound and yanked package warnings remain open for triage.
 - **Limit:** a successful compile and unit-test suite is not a complete KDBX interoperability/regression test against every user's database. Use disposable databases for the first run; user-controlled synchronized KDBX data should remain backed up.
+
+
+## WebView2 per-application network restrictions (2026-10-23; revision 2026-10-23-11)
+
+Windows WebView2 has **app-specific startup browser arguments** in `src-tauri/tauri.conf.json` under the single Tauri window's `additionalBrowserArgs`. These apply when **this application** creates its WebView2 browser process, not to Microsoft Edge, PowerToys, or every WebView2 process on the computer. The property is Windows-only; Linux/macOS browser implementations do not use these flags.
+
+- Preserve the WebView2/Wry defaults: `--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection`.
+- Suppress optional Chromium background communication: `--disable-background-networking --disable-component-update --disable-sync`.
+- Route ordinary WebView2 HTTP(S) requests to a deliberately absent local proxy: `--proxy-server=http://127.0.0.1:9` (no fallback proxy configured). The loopback target is not an Internet destination. Chromium's implicit localhost bypass preserves Tauri's local IPC; keep the existing `useHttpsScheme` and production CSP unchanged.
+
+This is **defense in depth, not a formal network sandbox**: browser switches can change in future WebView2 versions, WebView2 internals may bypass proxy settings for some services, and native Rust dependencies are not subject to the proxy. Deliberately opening an entry URL in the user's external default browser remains allowed. SSH Agent local IPC and local KDBX operations remain unchanged. Windows WebView2 Runtime updates remain managed by Microsoft outside this application.
+
+Validation required: verify OneKeePass can launch, unlock/edit/save a disposable KDBX, import local icons, use SSH Agent Service if applicable, and open entry URLs in the external browser. On the test PC inspect the WebView2 process command line for the arguments and capture external WFP traffic with exact OneKeePass/WebView2 PID ancestry. **Do not claim confirmed zero outbound connections until runtime tests pass**.
+
+Refs: https://v2.tauri.app/reference/config/#windowconfig ; https://learn.microsoft.com/en-us/microsoft-edge/webview2/reference/winrt/microsoft_web_webview2_core/corewebview2environmentoptions
