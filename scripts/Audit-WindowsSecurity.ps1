@@ -62,9 +62,11 @@ try {
         $pipeReport.QueryResult=$last
         $pipeReport.QueryError="CreateFile for READ_CONTROL failed: Win32 code $last. The pipe may be busy or security policy denied access."
     } else {
-        # SE_FILE_OBJECT=1; OWNER|GROUP|DACL information=7.
+        # Named pipes are kernel objects for GetSecurityInfo: SE_KERNEL_OBJECT=6.
+        # SE_FILE_OBJECT=1 causes Win32 ERROR_INVALID_PARAMETER (87) here.
+        # OWNER|GROUP|DACL security information=7.
         $result=[OkpPipeSecurity]::GetSecurityInfo(
-            $pipeHandle,1,7,[ref]$owner,[ref]$group,[ref]$dacl,[ref]$sacl,[ref]$descriptor)
+            $pipeHandle,6,7,[ref]$owner,[ref]$group,[ref]$dacl,[ref]$sacl,[ref]$descriptor)
         $pipeReport.QueryResult=$result
         if ($result -eq 0 -and $descriptor -ne [IntPtr]::Zero) {
         $len=[uint32]0
