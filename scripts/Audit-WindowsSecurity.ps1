@@ -20,9 +20,16 @@ $native = @'
 using System;
 using System.Runtime.InteropServices;
 public static class OkpPipeSecurity {
-    [DllImport("advapi32.dll", EntryPoint="GetNamedSecurityInfoW", CharSet=CharSet.Unicode)]
-    public static extern uint GetNamedSecurityInfo(
-        string name, int objectType, uint securityInfo, out IntPtr owner,
+    [DllImport("kernel32.dll", EntryPoint="CreateFileW", CharSet=CharSet.Unicode, SetLastError=true)]
+    public static extern IntPtr CreateFile(
+        string name, uint desiredAccess, uint shareMode, IntPtr securityAttributes,
+        uint creationDisposition, uint flagsAndAttributes, IntPtr templateFile);
+    [DllImport("kernel32.dll", SetLastError=true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool CloseHandle(IntPtr handle);
+    [DllImport("advapi32.dll", EntryPoint="GetSecurityInfo")]
+    public static extern uint GetSecurityInfo(
+        IntPtr handle, int objectType, uint securityInfo, out IntPtr owner,
         out IntPtr group, out IntPtr dacl, out IntPtr sacl, out IntPtr descriptor);
     [DllImport("advapi32.dll", EntryPoint="ConvertSecurityDescriptorToStringSecurityDescriptorW",
         CharSet=CharSet.Unicode, SetLastError=true)]
@@ -36,6 +43,7 @@ public static class OkpPipeSecurity {
 Add-Type -TypeDefinition $native -ErrorAction Stop
 
 $path = '\\.\pipe\openssh-ssh-agent'
+$pipeHandle=[IntPtr]::Zero
 $owner=[IntPtr]::Zero; $group=[IntPtr]::Zero; $dacl=[IntPtr]::Zero
 $sacl=[IntPtr]::Zero; $descriptor=[IntPtr]::Zero; $sddlPointer=[IntPtr]::Zero
 $pipeReport=[ordered]@{
@@ -44,11 +52,21 @@ $pipeReport=[ordered]@{
     BroadAccessDetected=$false; Limitations="An ACE alone does not establish effective access. Validate using a separate unprivileged account."
 }
 try {
-    # SE_FILE_OBJECT=1; OWNER|GROUP|DACL security information=7.
-    $result=[OkpPipeSecurity]::GetNamedSecurityInfo(
-        $path,1,7,[ref]$owner,[ref]$group,[ref]$dacl,[ref]$sacl,[ref]$descriptor)
-    $pipeReport.QueryResult=$result
-    if ($result -eq 0 -and $descriptor -ne [IntPtr]::Zero) {
+    # Named pipes require a HANDLE and GetSecurityInfo, not GetNamedSecurityInfo.
+    # READ_CONTROL=0x20000; FILE_SHARE_READ|FILE_SHARE_WRITE=3; OPEN_EXISTING=3.
+    # This briefly connects to the pipe but sends no agent protocol messages.
+    $pipeHandle=[OkpPipeSecurity]::CreateFile(
+        $path,0x00020000,3,[IntPtr]::Zero,3,0,[IntPtr]::Zero)
+    if ($pipeHandle -eq [IntPtr](-1)) {
+        $last=[Runtime.InteropServices.Marshal]::GetLastWin32Error()
+        $pipeReport.QueryResult=$last
+        $pipeReport.QueryError="CreateFile for READ_CONTROL failed: Win32 code $last. The pipe may be busy or security policy denied access."
+    } else {
+        # SE_FILE_OBJECT=1; OWNER|GROUP|DACL information=7.
+        $result=[OkpPipeSecurity]::GetSecurityInfo(
+            $pipeHandle,1,7,[ref]$owner,[ref]$group,[ref]$dacl,[ref]$sacl,[ref]$descriptor)
+        $pipeReport.QueryResult=$result
+        if ($result -eq 0 -and $descriptor -ne [IntPtr]::Zero) {
         $len=[uint32]0
         if ([OkpPipeSecurity]::ToSddl($descriptor,1,7,[ref]$sddlPointer,[ref]$len)) {
             $sddl=[Runtime.InteropServices.Marshal]::PtrToStringUni($sddlPointer)
@@ -69,10 +87,14 @@ try {
         } else {
             $pipeReport.QueryError="Could not convert pipe security descriptor to SDDL."
         }
-    } else {
-        $pipeReport.QueryError="GetNamedSecurityInfo returned Win32 code $result; endpoint may not exist or access may be denied."
+        } else {
+            $pipeReport.QueryError="GetSecurityInfo returned Win32 code $result."
+        }
     }
 } finally {
+    if ($pipeHandle -ne [IntPtr]::Zero -and $pipeHandle -ne [IntPtr](-1)) {
+        [void][OkpPipeSecurity]::CloseHandle($pipeHandle)
+    }
     if ($sddlPointer -ne [IntPtr]::Zero) { [void][OkpPipeSecurity]::LocalFree($sddlPointer) }
     if ($descriptor -ne [IntPtr]::Zero) { [void][OkpPipeSecurity]::LocalFree($descriptor) }
 }
