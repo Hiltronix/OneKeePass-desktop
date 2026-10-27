@@ -7,6 +7,31 @@ use chrono::{Local, NaiveDateTime};
 use log::debug;
 use onekeepass_core::db_service as kp_service;
 
+/// Read a selected *regular file* through a byte-limited stream. Unlike a
+/// metadata(path) + read(path) sequence, the check and read use the same open
+/// file handle. Read::take also bounds memory if another process grows it.
+pub(crate) fn read_bounded_file(path: &Path, max_bytes: u64) -> io::Result<Vec<u8>> {
+    use io::Read;
+
+    let file = fs::File::open(path)?;
+    if !file.metadata()?.is_file() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Expected a regular file",
+        ));
+    }
+
+    let mut bytes = Vec::new();
+    file.take(max_bytes.saturating_add(1)).read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > max_bytes {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Selected file exceeds {} bytes", max_bytes),
+        ));
+    }
+    Ok(bytes)
+}
+
 fn normalized_backup_source_stem(file_stem: &str) -> String {
     const BACKUP_TIMESTAMP_FORMAT: &str = "%Y-%m-%d %H %M %S";
     const TIMESTAMP_LEN: usize = 19;
@@ -334,4 +359,20 @@ mod tests {
 
         std::fs::remove_dir_all(&dir).unwrap();
     }
+    #[test]
+    fn bounded_file_reader_accepts_exact_limit_and_rejects_overflow() {
+        let path = std::env::temp_dir().join(format!(
+            "okp-bounded-file-test-{}.bin",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::write(&path, [1u8, 2, 3, 4, 5]).unwrap();
+        let exact = super::read_bounded_file(&path, 5).unwrap();
+        assert_eq!(exact, vec![1, 2, 3, 4, 5]);
+        let err = super::read_bounded_file(&path, 4).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+        let zero = super::read_bounded_file(&path, 0).unwrap_err();
+        assert_eq!(zero.kind(), std::io::ErrorKind::InvalidData);
+        std::fs::remove_file(path).unwrap();
+    }
+
 }

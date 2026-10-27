@@ -6,7 +6,6 @@ use std::collections::HashMap;
 use std::io::ErrorKind;
 
 use log::{debug, info};
-use std::fs::read_to_string;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use uuid::Uuid;
@@ -1395,7 +1394,11 @@ pub async fn add_custom_icon_from_file(
     db_key: &str,
     file_path: &str,
 ) -> Result<kp_service::CustomIconSummary> {
-    let bytes = std::fs::read(file_path).map_err(|e| e.to_string())?;
+    // Prevent unrestricted allocation and image decoding of enormous files.
+    // 10 MiB comfortably covers user-supplied icons and normal photographs.
+    const MAX_ICON_BYTES: u64 = 10 * 1024 * 1024;
+    let bytes = crate::file_util::read_bounded_file(Path::new(file_path), MAX_ICON_BYTES)
+        .map_err(|e| format!("Cannot load custom icon: {}", e))?;
     let png =
         onekeepass_core::favicon::normalize_image_to_png(&bytes, 64).map_err(|e| e.to_string())?;
     let name = std::path::Path::new(file_path)
@@ -1411,20 +1414,14 @@ pub async fn add_custom_icon_from_file(
         .ok_or_else(|| "Icon not found after add".to_string())
 }
 
-// Reads a small UTF-8 text file's contents. Used by the SSH Key entry form's
-// load-from-file affordance to read a private/public key file into a text field.
-// Capped so a stray large file selection cannot be slurped into memory.
+// Read a user-selected UTF-8 SSH key with an actual byte limit. Using a single
+// opened handle avoids the metadata(path)/read(path) time-of-check/use race.
 #[tauri::command]
 pub async fn read_text_file(file_path: &str) -> Result<String> {
-    const MAX_BYTES: u64 = 256 * 1024;
-    let meta = std::fs::metadata(file_path).map_err(|e| e.to_string())?;
-    if meta.len() > MAX_BYTES {
-        return Err(format!(
-            "File is too large to load ({} bytes); expected a key file",
-            meta.len()
-        ));
-    }
-    read_to_string(file_path).map_err(|e| e.to_string())
+    const MAX_KEY_BYTES: u64 = 256 * 1024;
+    let bytes = crate::file_util::read_bounded_file(Path::new(file_path), MAX_KEY_BYTES)
+        .map_err(|e| format!("Cannot load SSH key file: {}", e))?;
+    String::from_utf8(bytes).map_err(|e| format!("SSH key file is not UTF-8: {}", e))
 }
 
 #[tauri::command]

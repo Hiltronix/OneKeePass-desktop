@@ -71,6 +71,14 @@ foreach ($AppWindow in $Configuration.app.windows) {
         throw "WebView2 general autofill must be explicitly disabled on every window."
     }
 }
+# Both potentially sensitive local imports must retain bounded reads.
+$FileUtilSource = Get-Content -Raw (Join-Path $Root "src-tauri/src/file_util.rs")
+$CommandReadSource = Get-Content -Raw (Join-Path $Root "src-tauri/src/commands.rs")
+if ($FileUtilSource -notmatch 'fn read_bounded_file' -or
+    $CommandReadSource -notmatch '(?s)fn add_custom_icon_from_file.*?read_bounded_file' -or
+    $CommandReadSource -notmatch '(?s)fn read_text_file.*?read_bounded_file') {
+    throw "Local SSH-key and custom-icon imports must use the bounded reader."
+}
 $SearchSource = Get-Content -Raw (Join-Path $Root "src-cljs/main/onekeepass/frontend/search.cljs")
 if ($SearchSource -notmatch ':autoComplete\s+"off"') {
     throw "Search field does not explicitly disable HTML autocomplete."
