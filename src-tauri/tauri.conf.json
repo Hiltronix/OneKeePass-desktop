@@ -71,6 +71,7 @@
         "resizable": true,
         "fullscreen": false,
         "useHttpsScheme": true,
+        "generalAutofillEnabled": false,
         "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-background-networking --disable-component-update --disable-sync --proxy-server=http://127.0.0.1:9"
       }
     ]

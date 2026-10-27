@@ -64,6 +64,17 @@ if ($BiometricSource.Contains("UserConsentVerifier") -or
 }
 
 $Configuration = Get-Content -Raw (Join-Path $Root "src-tauri/tauri.conf.json") | ConvertFrom-Json
+# WebView2's built-in "Saved Info" / form Suggestions popup can ignore
+# HTML autocomplete=off. Disable general autofill at the browser level.
+foreach ($AppWindow in $Configuration.app.windows) {
+    if ($AppWindow.generalAutofillEnabled -ne $false) {
+        throw "WebView2 general autofill must be explicitly disabled on every window."
+    }
+}
+$SearchSource = Get-Content -Raw (Join-Path $Root "src-cljs/main/onekeepass/frontend/search.cljs")
+if ($SearchSource -notmatch ':autoComplete\s+"off"') {
+    throw "Search field does not explicitly disable HTML autocomplete."
+}
 $Version = $Configuration.version
 $BrowserArgs = $Configuration.app.windows[0].additionalBrowserArgs
 # Prevent redundant Tauri default grants from widening UI authority.

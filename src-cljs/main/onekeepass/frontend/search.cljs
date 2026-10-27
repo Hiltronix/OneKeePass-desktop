@@ -102,6 +102,9 @@
        [m/text-field {:label (tr-l "searchTerm")
                       :value term
                       :id "search_fld"
+                      ;; Never request browser autocomplete; WebView2's general
+                      ;; autofill is also disabled globally in tauri.conf.json.
+                      :autoComplete "off"
                       ;; Focus the search field whenever the dialog opens, including when a
                       ;; previous search term is restored after viewing an entry.
                       :autoFocus true
