@@ -49,7 +49,8 @@ $sacl=[IntPtr]::Zero; $descriptor=[IntPtr]::Zero; $sddlPointer=[IntPtr]::Zero
 $pipeReport=[ordered]@{
     Pipe=$path; Sddl=$null; QueryResult=$null; AceList=@()
     CurrentUserSid=[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-    BroadAccessDetected=$false; Limitations="An ACE alone does not establish effective access. Validate using a separate unprivileged account."
+    # Unset until the descriptor is actually retrieved and decoded.
+    BroadAccessDetected=$null; Limitations="An ACE alone does not establish effective access. Validate using a separate unprivileged account."
 }
 try {
     # Named pipes require a HANDLE and GetSecurityInfo, not GetNamedSecurityInfo.
@@ -74,6 +75,8 @@ try {
             $sddl=[Runtime.InteropServices.Marshal]::PtrToStringUni($sddlPointer)
             $pipeReport.Sddl=$sddl
             $sd=New-Object System.Security.AccessControl.RawSecurityDescriptor($sddl)
+            # A null DACL permits unrestricted access; an empty DACL denies all.
+            $pipeReport.BroadAccessDetected=($null -eq $sd.DiscretionaryAcl)
             $broad=@("S-1-1-0","S-1-5-7","S-1-5-11","S-1-5-32-545")
             foreach($ace in $sd.DiscretionaryAcl) {
                 $sid=$ace.SecurityIdentifier.Value
