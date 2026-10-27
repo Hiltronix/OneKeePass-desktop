@@ -51,10 +51,29 @@ pub type Result<T> = std::result::Result<T, String>;
 // Temporary decrypted attachments opened in external viewers. Keep a separate
 // list per database so locking DB A does not remove DB B's temporary files.
 // Normal quit/startup still sweep the shared okp_cache directory.
-static TEMP_ATTACHMENTS_BY_DB: OnceLock<Mutex<HashMap<String, Vec<PathBuf>>>> = OnceLock::new();
+#[derive(Clone)]
+struct TempAttachment {
+    path: PathBuf,
+    // Revoked on database lock/close, even if an external editor prevents
+    // deletion. Revoked entries are retained only for cleanup retries.
+    active: bool,
+}
 
-fn temp_attachment_registry() -> &'static Mutex<HashMap<String, Vec<PathBuf>>> {
+type TempAttachmentsByDb = HashMap<String, Vec<TempAttachment>>;
+static TEMP_ATTACHMENTS_BY_DB: OnceLock<Mutex<TempAttachmentsByDb>> = OnceLock::new();
+
+fn temp_attachment_registry() -> &'static Mutex<TempAttachmentsByDb> {
     TEMP_ATTACHMENTS_BY_DB.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+// Verify an exact, issued path rather than accepting arbitrary files inside
+// the shared temp directory. A file whose database was locked/closed cannot
+// be reopened while it is awaiting a best-effort deletion retry.
+fn attachment_is_active(registry: &TempAttachmentsByDb, path: &Path) -> bool {
+    registry
+        .values()
+        .flat_map(|entries| entries.iter())
+        .any(|entry| entry.active && entry.path == path)
 }
 
 pub(crate) fn remove_temporary_attachments_for_db(db_key: &str) {
@@ -63,15 +82,18 @@ pub(crate) fn remove_temporary_attachments_for_db(db_key: &str) {
         registry.remove(db_key).unwrap_or_default()
     };
     let mut retry = Vec::new();
-    for path in files {
-        match std::fs::remove_file(&path) {
+    for entry in files {
+        match std::fs::remove_file(&entry.path) {
             Ok(()) => {}
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
             Err(e) => {
-                // External editors may keep files open on Windows. Do not pretend
-                // that deletion succeeded; retain the path for a later retry.
+                // Keep the path for cleanup retry, but revoke permission to
+                // open it: the associated DB may now be locked or closed.
                 log::warn!("Unable to remove decrypted attachment temp file: {e}");
-                retry.push(path);
+                retry.push(TempAttachment {
+                    path: entry.path,
+                    active: false,
+                });
             }
         }
     }
@@ -849,7 +871,10 @@ pub(crate) async fn save_attachment_as_temp_file(
         .unwrap()
         .entry(db_key.to_owned())
         .or_default()
-        .push(path);
+        .push(TempAttachment {
+            path,
+            active: true,
+        });
     Ok(path_string)
 }
 
@@ -864,6 +889,12 @@ pub(crate) async fn open_attachment_temp_file(file_path: &str) -> Result<()> {
 
     if !canonical.starts_with(&allowed_root) {
         return Err("Attachment path is outside the allowed temp directory".into());
+    }
+    // The renderer may not choose an unrelated file under okp_cache. Only
+    // paths produced by this running app, for databases still open/unlocked,
+    // can be launched. A failed deletion after lock does not extend access.
+    if !attachment_is_active(&temp_attachment_registry().lock().unwrap(), &requested) {
+        return Err("Attachment is not registered as an active viewer file".into());
     }
 
     open::that_detached(&canonical).map_err(|e| format!("Failed to open file: {e}"))
@@ -1693,3 +1724,28 @@ pub fn send_sequence_to_winow_sync(db_key: &str,entry_uuid: Uuid,window_info:aut
 }
 
 */
+
+#[cfg(test)]
+mod attachment_registry_tests {
+    use super::{attachment_is_active, TempAttachment, TempAttachmentsByDb};
+    use std::path::PathBuf;
+
+    #[test]
+    fn only_exact_active_attachment_paths_can_be_opened() {
+        let path_a = PathBuf::from("test-only-cache/active.txt");
+        let path_b = PathBuf::from("test-only-cache/revoked.txt");
+        let mut registry = TempAttachmentsByDb::new();
+        registry.insert(
+            "database-a".to_string(),
+            vec![
+                TempAttachment { path: path_a.clone(), active: true },
+                TempAttachment { path: path_b.clone(), active: false },
+            ],
+        );
+        assert!(attachment_is_active(&registry, &path_a));
+        assert!(!attachment_is_active(&registry, &path_b));
+        assert!(!attachment_is_active(&registry, &PathBuf::from("test-only-cache/other.txt")));
+        registry.remove("database-a");
+        assert!(!attachment_is_active(&registry, &path_a));
+    }
+}

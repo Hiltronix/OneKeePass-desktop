@@ -72,6 +72,13 @@ foreach ($AppWindow in $Configuration.app.windows) {
     }
 }
 # Both potentially sensitive local imports must retain bounded reads.
+# The attachment-viewer open command must require an active registered path;
+# mere containment in okp_cache is not authorization to launch a file.
+$AttachmentSource = Get-Content -Raw (Join-Path $Root "src-tauri/src/commands.rs")
+if ($AttachmentSource -notmatch '(?s)fn open_attachment_temp_file.*?attachment_is_active' -or
+    $AttachmentSource -notmatch 'active:\s*false') {
+    throw "The temp attachment viewer registration/lock revocation guard is missing."
+}
 $FileUtilSource = Get-Content -Raw (Join-Path $Root "src-tauri/src/file_util.rs")
 $CommandReadSource = Get-Content -Raw (Join-Path $Root "src-tauri/src/commands.rs")
 if ($FileUtilSource -notmatch 'fn read_bounded_file' -or
