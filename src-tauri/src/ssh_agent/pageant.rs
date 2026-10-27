@@ -2,7 +2,7 @@
 //
 // PuTTY-family clients (plink, WinSCP, TortoiseGit, FileZilla) talk to an agent
 // not over a socket but by:
-//   1. finding a message-only window whose class and title are both `Pageant`,
+//   1. finding a hidden top-level window whose class and title are both `Pageant`,
 //   2. creating a named shared file-mapping holding `[u32 BE len][agent request]`,
 //   3. sending that window `WM_COPYDATA` with `dwData == 0x804E50BA` and `lpData`
 //      pointing at the mapping's name,
@@ -53,7 +53,7 @@ use windows_sys::Win32::System::Memory::{
 use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, FindWindowW, GetMessageW,
-    PostMessageW, PostQuitMessage, RegisterClassW, TranslateMessage, HWND_MESSAGE, MSG, WM_CLOSE,
+    PostMessageW, PostQuitMessage, RegisterClassW, TranslateMessage, MSG, WM_CLOSE,
     WM_COPYDATA, WM_DESTROY, WNDCLASSW,
 };
 
@@ -158,7 +158,7 @@ pub(crate) fn start(store: Arc<RwLock<SshAgentStore>>) -> Result<PageantHandle, 
     }
 }
 
-// Registers the window class, creates the message-only window, reports the result
+// Registers the window class, creates the hidden top-level window, reports the result
 // back through `tx`, then pumps messages until the window is destroyed.
 fn thread_main(tx: std::sync::mpsc::Sender<Result<isize, String>>) {
     unsafe {
@@ -184,7 +184,7 @@ fn thread_main(tx: std::sync::mpsc::Sender<Result<isize, String>>) {
             0,
             0,
             0,
-            HWND_MESSAGE,
+            0, // hWndParent: hidden top-level window, discoverable by FindWindowW.
             0, // hMenu
             hinstance,
             null(),
@@ -192,6 +192,13 @@ fn thread_main(tx: std::sync::mpsc::Sender<Result<isize, String>>) {
 
         if hwnd == 0 {
             let _ = tx.send(Err("failed to create the Pageant window".into()));
+            return;
+        }
+
+        // PuTTY-compatible clients locate the listener by its window class and title.
+        if FindWindowW(class_name.as_ptr(), title.as_ptr()) != hwnd {
+            DestroyWindow(hwnd);
+            let _ = tx.send(Err("Pageant window is not discoverable".into()));
             return;
         }
 
