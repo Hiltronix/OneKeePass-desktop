@@ -152,3 +152,8 @@ Validation: Windows build, advisory rescan, Windows Hello rejection/success, loc
 The read-only audit utility now records `file-acls.json` alongside the pipe ACL and TCP observations. When a running OneKeePass process exposes its executable path, the helper examines the detected application data folder, active log, backups folder and `%TEMP%\\okp_cache` for ACLs granting Everyone, Anonymous Logon, Authenticated Users or Builtin Users access, including inherited ACEs.
 
 A broad ACE means *review the effective rights*; it does not establish that another user can read the sensitive files, and shared/fat/exFAT volumes may have different semantics. No permissions are changed automatically. Review paths, account SIDs and directory names before sharing reports; this audit cannot reliably prove secure deletion.
+
+
+## Browser native-messaging registration inventory
+
+The read-only PowerShell helper now also enumerates Windows HKCU/HKLM browser native-messaging host registry keys for Chrome, Chromium, Edge, Brave and Firefox, including the WOW6432Node machine registry view. Matching OneKeePass and OKP host registrations are written to `native-messaging-registrations.json`. This does not remove or modify registrations. A result of zero applies only to the inspected Windows registry locations and does not rule out other browser-installation mechanisms.

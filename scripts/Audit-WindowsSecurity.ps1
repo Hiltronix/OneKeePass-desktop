@@ -163,6 +163,45 @@ if ($exePath) {
 }
 $aclChecks | ConvertTo-Json -Depth 7 | Set-Content -Encoding UTF8 (Join-Path $OutputDirectory 'file-acls.json')
 
+# Inventory obsolete native-messaging registrations, if any. No registry keys
+# are changed or removed. Windows supports HKCU/HKLM host registration for
+# Chrome/Chromium/Edge/Firefox families; inspect 32-bit HKLM as well.
+$nativeHostFound=New-Object 'System.Collections.Generic.List[object]'
+$registries=@('HKCU:', 'HKLM:', 'HKLM:\SOFTWARE\WOW6432Node')
+$hosts=@(
+    'Software\Google\Chrome\NativeMessagingHosts',
+    'Software\Chromium\NativeMessagingHosts',
+    'Software\Microsoft\Edge\NativeMessagingHosts',
+    'Software\Mozilla\NativeMessagingHosts',
+    'Software\BraveSoftware\Brave-Browser\NativeMessagingHosts'
+)
+foreach($base in $registries) {
+    foreach($suffix in $hosts) {
+        $basePath=if ($base -like '*WOW6432Node') {
+            # Avoid duplicating Software when enumerating the WOW6432Node view.
+            $base + '\' + $suffix.Substring('Software\'.Length)
+        } else {
+            $base + '\' + $suffix
+        }
+        if (-not (Test-Path -Path $basePath)) { continue }
+        foreach($hostKey in @(Get-ChildItem -Path $basePath -ErrorAction SilentlyContinue)) {
+            try {
+                $registration=(Get-Item -LiteralPath $hostKey.PSPath -ErrorAction Stop).GetValue('')
+                if ($hostKey.PSChildName -match '(?i)onekeepass|okp[_\.\-]' -or
+                    ([string]$registration) -match '(?i)onekeepass|okp[_\.\-]') {
+                    $nativeHostFound.Add([pscustomobject]@{
+                        RegistryPath=$hostKey.Name; HostName=$hostKey.PSChildName
+                        ManifestPath=$registration
+                    })
+                }
+            } catch {
+                Write-Warning "Could not inspect native-messaging registration: $($hostKey.Name)"
+            }
+        }
+    }
+}
+@($nativeHostFound) | ConvertTo-Json -Depth 5 | Set-Content -Encoding UTF8 (Join-Path $OutputDirectory 'native-messaging-registrations.json')
+
 $tracked=@{}
 $tracked[[int]$root.ProcessId]="OneKeePass.exe"
 $observations=New-Object 'System.Collections.Generic.List[object]'
@@ -213,6 +252,7 @@ $summary=[ordered]@{
     NonLoopbackTCPRecords=$external.Count
     PipeQueryWin32Result=$pipeReport.QueryResult
     PipeBroadAllowAceFound=$pipeReport.BroadAccessDetected
+    NativeMessagingRegistrationsFound=$nativeHostFound.Count
     FilesystemAclChecks=$aclChecks.Count
     FilesystemBroadAllowAceRecords=@($aclChecks | Where-Object { $_.BroadAllowAceFound -eq $true }).Count
     NetworkConclusion="INCONCLUSIVE: TCP polling misses transient connections and UDP datagrams, and child-process coverage is best effort. A WFP/ETW packet/process trace is required to verify absence of outbound traffic."
@@ -225,4 +265,5 @@ Write-Host "Distinct TCP records: $($observations.Count); non-loopback records: 
 Write-Host "Named-pipe security query Win32 result: $($pipeReport.QueryResult)"
 Write-Host "Broad allow ACE detected on pipe: $($pipeReport.BroadAccessDetected)"
 Write-Host "Broad allow ACEs in file ACL report: $(@($aclChecks | Where-Object { $_.BroadAllowAceFound -eq $true }).Count)"
+Write-Host "Legacy OneKeePass native messaging registration matches: $($nativeHostFound.Count)"
 Write-Warning "This is not a packet-level no-network proof. Review summary.json before treating the audit as passed."
