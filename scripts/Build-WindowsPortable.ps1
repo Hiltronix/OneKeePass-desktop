@@ -33,6 +33,21 @@ foreach ($Program in @("cargo.exe", "rustc.exe", "yarn.cmd", "java.exe")) {
     }
 }
 
+# Reject reintroduction of legacy renderer-callable security bypasses.
+$MainSource = Get-Content -Raw (Join-Path $Root "src-tauri/src/main.rs")
+foreach ($ForbiddenCommand in @(
+    "commands::unlock_kdbx_on_biometric_authentication,",
+    "commands::authenticate_with_biometric,",
+    "commands::svg_file,"
+)) {
+    if ($MainSource.Contains($ForbiddenCommand)) {
+        throw "Unsafe/deprecated Tauri command remains registered: $ForbiddenCommand"
+    }
+}
+if (-not $MainSource.Contains("commands::unlock_kdbx_with_biometric,")) {
+    throw "Authenticated biometric-unlock command is not registered."
+}
+
 $Configuration = Get-Content -Raw (Join-Path $Root "src-tauri/tauri.conf.json") | ConvertFrom-Json
 $Version = $Configuration.version
 $BrowserArgs = $Configuration.app.windows[0].additionalBrowserArgs

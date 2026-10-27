@@ -129,3 +129,12 @@ The user installed the revised Windows build and provided an actual live named-p
 - The accompanying 5-second TCP sample observed zero TCP connections.
 
 **Conclusion:** The restricted DACL, normal OpenSSH identity enumeration, and KiTTY/WinSCP compatibility are **runtime validated**. A deliberate cross-account negative-access test has **not** yet been performed; elevated Administrators and SYSTEM intentionally retain access. Network isolation remains only *partially* tested because periodic TCP sampling omits transient connections and UDP/DNS.
+
+
+## Stage 1 security command-surface review — revision 2026-10-27-04
+
+Audit identified two renderer-callable privileged commands requiring removal: an unauthenticated legacy biometric unlock, and an obsolete caller-supplied SVG path reader without containment checks. Both commands, corresponding deprecated frontend wrappers, and the unneeded two-step biometric verification command are removed in this revision. The existing fused `unlock_kdbx_with_biometric` path remains. A build-level regression check rejects re-registering these commands.
+
+Residual network-capable features in core (`favicon`, `reqwest_dav`) remain linked despite Windows network guards; feature pruning cannot be represented as a no-risk refactor without preserving local-icon import and auditing shared-core Cargo features. No network-facing runtime exploit of the RSA advisory was found in the reviewed Windows agent: its RSA signing is through restricted local IPC and confirmation controls. `RUSTSEC-2023-0071` remains present and **unpatched** per the September 2026 RustSec advisory; do not interpret local-only use as a universal security fix.
+
+Validation: Windows build, advisory rescan, Windows Hello rejection/success, local icons, SSH agent regression; external temporary attachment lifecycle and WFP/ETW traffic tracing still pending.

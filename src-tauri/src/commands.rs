@@ -1,7 +1,6 @@
-use tauri::utils::platform::resource_dir;
 use tauri::Runtime;
 use tauri::State;
-use tauri::{command, Emitter, Env};
+use tauri::{command, Emitter};
 
 use std::collections::HashMap;
 use std::io::ErrorKind;
@@ -1076,16 +1075,6 @@ pub(crate) async fn lock_kdbx(_db_key: &str) -> Result<()> {
 }
 
 #[command]
-pub(crate) async fn unlock_kdbx_on_biometric_authentication(
-    db_key: &str,
-) -> Result<kp_service::KdbxLoaded> {
-    let r = kp_service::unlock_kdbx_on_biometric_authentication(db_key)?;
-    // Re-add this db's SSH keys now that it is unlocked.
-    ssh_agent::reload_keys_for_db(db_key);
-    Ok(r)
-}
-
-#[command]
 pub(crate) async fn unlock_kdbx_with_biometric(db_key: &str) -> Result<kp_service::KdbxLoaded> {
     // Combine the biometric verification and the unlock in a single Rust command
     // so the success boolean never round-trips through JS. This removes the
@@ -1095,8 +1084,7 @@ pub(crate) async fn unlock_kdbx_with_biometric(db_key: &str) -> Result<kp_servic
     // never invoked on Linux, which has no biometric and uses credential re-entry
     // (unlock_kdbx) - that path is untouched.
     //
-    // The older two-step commands (authenticate_with_biometric +
-    // unlock_kdbx_on_biometric_authentication) are retained for compatibility.
+    // No unauthenticated renderer-callable unlock command is registered.
     if !biometric::authenticate_with_biometric(db_key) {
         // Marker string the frontend recognizes, so it falls back to the password
         // dialog instead of showing a hard error (see BIOMETRIC_AUTH_FAILED in
@@ -1267,46 +1255,9 @@ pub async fn load_custom_svg_icons<R: Runtime>(
     Ok(app_state::load_custom_svg_icons(&app))
 }
 
-// TODO: Remove this or need to clean up if required
-// Leaving it here as example for the future use if any
-#[tauri::command]
-pub async fn svg_file<R: Runtime>(app: tauri::AppHandle<R>, name: &str) -> Result<String> {
-    println!(
-        "Resources dir is {:?}",
-        resource_dir(app.package_info(), &Env::default())
-    );
-    // println!("Home dir is {:?}", home_dir());
-    // println!("Runtime dir {:?}", runtime_dir());
-    // println!("App Config dir {:?}", app_config_dir(&app.config().clone()));
-
-    // let path = resolve_path(
-    //   &app.config(),
-    //   app.package_info(),
-    //   &Env::default(),
-    //   "../resources/public/icons/custom-svg",
-    //   Some(BaseDirectory::Resource),
-    // )
-    // .unwrap();
-    // println!("resolved path  is {:?}", path);
-
-    let svg_path = resource_dir(app.package_info(), &Env::default())
-        .unwrap()
-        .join("_up_/resources/public/icons/custom-svg")
-        .join(name);
-    println!("svg_path  is {:?}", svg_path);
-    let s = read_to_string(svg_path).unwrap();
-    //Ok("Done".into())
-    Ok(s)
-}
-
 #[tauri::command]
 pub async fn supported_biometric_type() -> Result<String> {
     Ok(biometric::supported_biometric_type())
-}
-
-#[tauri::command]
-pub async fn authenticate_with_biometric(db_key: &str) -> Result<bool> {
-    Ok(biometric::authenticate_with_biometric(db_key))
 }
 
 ///--------------   All auto typing command calls

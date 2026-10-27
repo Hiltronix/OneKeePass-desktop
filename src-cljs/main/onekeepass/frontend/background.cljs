@@ -371,15 +371,8 @@
                              :password password
                              :key-file-name key-file-name} dispatch-fn))
 
-(defn unlock-kdbx-on-biometric-authentication [db-key dispatch-fn]
-  (invoke-api "unlock_kdbx_on_biometric_authentication" {:db-key db-key} dispatch-fn))
-
-(defn authenticate-with-biometric [db-key dispatch-fn]
-  (invoke-api "authenticate_with_biometric" {:db-key db-key} dispatch-fn))
-
-;; Combined command that does the biometric verification AND the reveal in Rust
-;; (see unlock_kdbx_with_biometric). Replaces the two calls above in the unlock
-;; flow; the two above are kept for compatibility.
+;; Biometric authentication and unlock must be combined into one Rust command.
+;; Never reintroduce the old two-step renderer-callable unlock path.
 (defn unlock-kdbx-with-biometric [db-key dispatch-fn]
   (invoke-api "unlock_kdbx_with_biometric" {:db-key db-key} dispatch-fn))
 
@@ -720,9 +713,6 @@
 (defn load-custom-svg-icons
   [dispatch-fn]
   (invoke-api "load_custom_svg_icons" {} dispatch-fn :convert-response false))
-
-(defn svg-file [name dispatch-fn]
-  (invoke-api "svg_file" {:name name} dispatch-fn :convert-response false))
 
 (defn read-app-preference [dispatch-fn]
   (invoke-api "read_app_preference" {} dispatch-fn))

@@ -212,3 +212,18 @@ Current Windows source builds each `\\.\pipe\openssh-ssh-agent` instance with a 
 User-provided Windows output from revised `2026-10-27-03` confirms the live `\\.\pipe\openssh-ssh-agent` ACL is protected and grants access only to SYSTEM, Builtin Administrators and the current Windows account. There are no Everyone or Anonymous ACEs. `ssh-add -l` enumerates the user's two ED25519 identities, and KiTTY and WinSCP both authenticate using OKP keys after the change. The Windows build succeeded in CI.
 
 **Status:** The restricted ACL and supported-client compatibility are validated on the user's machine. A *different, non-administrator account* has not yet tested access denial. The network audit observed zero sampled TCP connections, but DNS/UDP and transient traffic still require WFP/ETW testing.
+
+
+## Stage 1 follow-up: exposed Tauri commands (2026-10-27-04)
+
+**High / fixed in source — biometric unlock bypass:** `src-tauri/src/main.rs` registered `unlock_kdbx_on_biometric_authentication` even though it called the shared-core re-unlock routine without performing Windows Hello or other biometric verification. The frontend's active event flow was already using `unlock_kdbx_with_biometric` (see `src-cljs/main/onekeepass/frontend/events/open_db_form.cljs`), which performs verification and unlock together inside Rust. Revision 2026-10-27-04 removes the old command and its obsolete frontend wrapper, and also removes the deprecated standalone `authenticate_with_biometric` renderer command. The unified authenticated unlock stays registered.
+
+**High / fixed in source — arbitrary local read via obsolete SVG command:** `svg_file` was registered as a Tauri command. Its implementation joined a renderer-supplied `name` to the resource directory, followed by `read_to_string(...).unwrap()`, with no validation of traversal, absolute paths or symlinks. This was identified in source review; exploitation was not demonstrated. The command and unused frontend wrapper are removed; local SVG icons continue through the separate `load_custom_svg_icons` API. The intentionally user-selected SSH key file reader remains enabled and bounded to 256 KiB.
+
+**Regression guard:** the Windows portable build script rejects reintroduction of the three deprecated command registrations and verifies that `unlock_kdbx_with_biometric` remains available.
+
+**Dependency scanner:** the GitHub Actions security audit now also runs after changes to the backend command registrations, SSH agent, core Cargo manifest and Tauri capabilities, not only lockfiles. The advisory scan still archives findings even when scanners report vulnerable packages; a green Actions result does not mean zero advisories.
+
+**Required acceptance:** Windows Hello unlock must display system verification; Cancel must not unlock. A correct verification must unlock with the previously stored session key. Wrong master password must not unlock. Normal key-file/password workflows, KiTTY/WinSCP, local SVG icons and KDBX save/reopen must continue functioning. Run scanner and inspect its reports. CI compilation alone is insufficient.
+
+**Remaining sensitive-data lifecycle issues:** externally opened attachments use decrypted temporary files in `%TEMP%\\okp_cache`, swept on normal exit/startup but not assured after abnormal termination or while an external editor retains the file. Clipboard data and OS clipboard history, session-key plaintext returned by `KeyStoreService`, log/backup NTFS ACLs, and the RSA advisory remain open. Avoid claiming secure deletion from SSD storage.

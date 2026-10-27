@@ -8,6 +8,11 @@ on:
     paths:
       - '.github/workflows/hiltronix-security-audit.yml'
       - 'src-tauri/Cargo.lock'
+      - 'src-tauri/Cargo.toml'
+      - 'src-tauri/src/main.rs'
+      - 'src-tauri/src/commands.rs'
+      - 'src-tauri/src/ssh_agent/**'
+      - 'src-tauri/capabilities/**'
       - 'onekeepass-proxy/Cargo.lock'
       - 'yarn.lock'
       - 'package.json'
