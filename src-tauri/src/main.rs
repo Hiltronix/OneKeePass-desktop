@@ -98,7 +98,20 @@ fn main() {
         .setup(|app| {
             app_state::init_app(app);
             #[cfg(target_os = "windows")]
-            window_geometry::restore(app.app_handle());
+            {
+                // Set the main HWND icon explicitly for the Alt+Tab switcher.
+                // The executable resource icon alone may not be used as ICON_BIG.
+                if let Some(window) = app.get_webview_window("main") {
+                    if let Some(icon) = app.default_window_icon() {
+                        window.set_icon(icon.clone())?;
+                    } else {
+                        log::warn!("Default Windows window icon is unavailable");
+                    }
+                } else {
+                    log::warn!("Main window is unavailable while setting its icon");
+                }
+                window_geometry::restore(app.app_handle());
+            }
             // Lock (encrypt in RAM) all open databases when the OS is about to
             // sleep, before the memory image can hit a hibernation file.
             power_monitor::start(app.app_handle());

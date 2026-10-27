@@ -97,3 +97,9 @@ With a disposable database, verify all of these on Windows 10:
 6. Open entry and group icon dialogs: verify **Add from File** works and **Add from URL** is absent. Existing icons embedded in KDBX databases must still render.
 7. Exercise opening, editing and saving KDBX4 files, and custom templates, using test data only.
 
+
+## Windows Alt+Tab icon (2026-10-26-02)
+
+The Windows app startup now explicitly applies the Tauri default window icon to the `main` native window using `WebviewWindow::set_icon`, rather than relying solely on the icon embedded in `OneKeePass.exe`. This allows Windows to retrieve the window's large icon for the Alt+Tab switcher. The existing `.ico` file already contains 16, 24, 32, 48, 64, 96, 128 and 256 pixel variants; no icon resources or Cargo dependencies were replaced.
+
+**Windows acceptance:** Build the current desktop revision, run the portable EXE, and compare the icon in the Alt+Tab switcher against the taskbar and window caption icon. Repeat after closing and relaunching the application. This is a source-level change awaiting Windows runtime validation.
