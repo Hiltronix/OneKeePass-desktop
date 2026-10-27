@@ -114,7 +114,7 @@
                        :maxWidth "calc(100vw - 32px)"
                        :mt 0.5
                        :overflow "hidden"}}
-       [mui-stack {:sx {:maxHeight 300 :overflowY "auto"}}
+       [mui-stack {:sx {:maxHeight "66.6667vh" :overflowY "auto"}}
         (cond
           error-text
           [mui-alert {:severity "error"} error-text]
