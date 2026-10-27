@@ -190,3 +190,14 @@ The old code spawned Tokio named-pipe binding on Tauri's shared async runtime, t
 **Build acceptance:** MSVC compile and portable ZIP packaging must pass. On Windows, launch revised OneKeePass, open the existing disposable SSH Key entry with `Add to SSH Agent` enabled, and verify the settings display the pipe and nonzero key count; then `ssh-add -l` should report the expected public-key fingerprint. Test `ssh-add -T <existing-public-key-file>` to verify signing and confirmation; lock database and ensure the key disappears, then unlock and verify it returns. Check stop/start without delays, no bind timeout in log, and confirm separate OpenSSH service remains stopped. The source change is not a claim that runtime validation has passed.
 
 **Windows named-pipe permissions:** custom DACL enforcement remains a separate audit item; this fix does not change the security descriptor and does not prove isolation from other local accounts.
+
+
+## Follow-up audits (2026-10-27)
+
+Network isolation and Windows OpenSSH named-pipe security have received a new source-level review. See [HILTRONIX-WINDOWS-SECURITY-REVIEW-2026-10-27.md](HILTRONIX-WINDOWS-SECURITY-REVIEW-2026-10-27.md) for inspected control points, findings and acceptance criteria.
+
+- **Network:** updater, browser native messaging and Windows remote-storage entry points are disabled and WebView2 restrictions are configured; no user-machine, process-attributed WFP/ETW network capture has been performed. **Runtime verification open.**
+- **Named pipe:** OpenSSH pipe currently binds with `ssh-agent-lib` default security descriptor, without an explicit user-only DACL or verified per-client token restriction. Default permissions can include broader read access. **ACL hardening and effective-access verification open.** Pageant's mapping-owner check is independent.
+- **Evidence helper:** `scripts/Audit-WindowsSecurity.ps1` queries the named-pipe DACL by handle and samples process-attributed TCP endpoints without altering Windows configuration. Polling does not capture UDP or all short-lived TCP connections; a second-user negative test is still necessary.
+
+Do not close W-07 or the named-pipe security issue on the strength of source review or a green build alone.
