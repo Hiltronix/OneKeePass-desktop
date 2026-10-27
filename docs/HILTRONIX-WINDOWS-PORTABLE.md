@@ -129,3 +129,9 @@ With Agent Mode enabled and the KDBX database unlocked, inspect the SSH Agent se
 If no sources are found, the entry must be of the **SSH Key** type and explicitly have **Add to SSH Agent** enabled (merely attaching a key to an ordinary entry is not sufficient). A parsing error emits `skipping invalid SSH Key entry` without exposing the private key. If keys are served, but **no Pageant IPC request** appears during a KiTTY attempt, investigate KiTTY's client configuration / agent discovery. OpenSSH uses a different transport, which can be independently checked with `ssh-add -l` in PowerShell. No new network access is added.
 
 **Validation:** The Windows portable build must compile before use. The result of any PuTTY-family runtime authentication remains unverified until the client test succeeds.
+
+## Help menu: Open Log File (2026-10-27-02)
+
+The non-macOS Help menu now lists **Open Log File** between **Check for Updates** and **About OneKeePass**. The native menu handler opens the existing production log through the operating system's registered file association, using the already-existing `open::that_detached` helper. Portable Windows resolves `onekeepass-data/logs/onekeepass.log` from the same portable home-directory logic that logging uses. Development builds select `onekeepass-dev.log` instead. Missing files and launch failures show a dialog and are logged.
+
+**Windows acceptance:** In the portable build, choose Help > Open Log File and verify that Windows opens the current `onekeepass.log` in its associated application. Move the extracted portable application directory and verify the menu still opens the log relative to its new location. Check the menu order and error handling if the file is unavailable.

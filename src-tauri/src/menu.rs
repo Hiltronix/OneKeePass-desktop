@@ -18,6 +18,7 @@ pub mod menu_ids {
 
     pub const QUIT: &str = "Quit";
     pub const CHECK_FOR_UPDATES: &str = "CheckForUpdates";
+    pub const OPEN_LOG_FILE: &str = "OpenLogFile";
     pub const APP_SETTINGS: &str = "AppSettings";
     pub const NEW_DATABASE: &str = "NewDatabase";
     pub const OPEN_DATABASE: &str = "OpenDatabase";
@@ -95,7 +96,14 @@ pub(crate) fn build_menus<R: Runtime>(app_handle: &AppHandle<R>) -> Result<(), t
     let check_for_updates_item = MenuItemBuilder::new(
         system_menu_translation.sub_menu(CHECK_FOR_UPDATES, "Check for Updates..."),
     )
-    .id(CHECK_FOR_UPDATES)
+.id(CHECK_FOR_UPDATES)
+    .build(app_handle)?;
+
+    #[cfg(not(target_os = "macos"))]
+    let open_log_file_item = MenuItemBuilder::new(
+        system_menu_translation.sub_menu(OPEN_LOG_FILE, "Open Log File"),
+    )
+    .id(OPEN_LOG_FILE)
     .build(app_handle)?;
 
     #[cfg(all(target_os = "macos", not(feature = "mas-build")))]
@@ -167,6 +175,7 @@ pub(crate) fn build_menus<R: Runtime>(app_handle: &AppHandle<R>) -> Result<(), t
         system_menu_translation.main_menu(MAIN_MENU_HELP),
     )
     .item(&check_for_updates_item)
+    .item(&open_log_file_item)
     .separator()
     .item(&about_menu_item)
     .build()?;
@@ -506,7 +515,39 @@ pub fn handle_menu_events<R: Runtime>(
     app_handle: &AppHandle<R>,
     menu_event: &MenuEvent,
 ) -> Result<(), tauri::Error> {
+    if menu_event.id().0 == OPEN_LOG_FILE {
+        open_log_file(app_handle);
+        return Ok(());
+    }
+
     emit_menu_event(app_handle, &menu_event.id().0)
+}
+
+// Open the existing log using the OS file association, including in portable mode.
+fn open_log_file<R: Runtime>(app_handle: &AppHandle<R>) {
+    use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
+
+    #[cfg(feature = "onekeepass-dev")]
+    let file_name = "onekeepass-dev.log";
+    #[cfg(not(feature = "onekeepass-dev"))]
+    let file_name = "onekeepass.log";
+
+    let log_path = crate::app_paths::app_logs_dir().join(file_name);
+    let result = if log_path.is_file() {
+        open::that_detached(&log_path).map_err(|e| e.to_string())
+    } else {
+        Err("The log file does not exist.".to_string())
+    };
+
+    if let Err(error) = result {
+        log::error!("Failed to open log file {}: {}", log_path.display(), error);
+        app_handle
+            .dialog()
+            .message(format!("Could not open the log file:\n{}\n\n{}", log_path.display(), error))
+            .title("Open Log File")
+            .kind(MessageDialogKind::Error)
+            .show(|_| {});
+    }
 }
 
 fn emit_menu_event<R: Runtime>(
