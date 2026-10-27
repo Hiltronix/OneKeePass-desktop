@@ -8,6 +8,7 @@ on:
     paths:
       - '.github/workflows/hiltronix-windows-portable.yml'
       - 'scripts/Build-WindowsPortable.ps1'
+      - 'scripts/Audit-WindowsSecurity.ps1'
       - 'src-tauri/**'
       - 'src-cljs/**'
       - 'src-js/**'
@@ -64,6 +65,20 @@ jobs:
             src-tauri
             onekeepass-proxy
           key: hiltronix-windows-portable
+
+      - name: Parse Windows security audit helper (no execution)
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Join-Path $PWD 'scripts/Audit-WindowsSecurity.ps1'),
+            [ref]$tokens, [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) {
+            throw ($errors | ForEach-Object { $_.ToString() } | Out-String)
+          }
+          Write-Host "Audit helper parses successfully"
 
       - name: Compile and package portable ZIP
         shell: pwsh
