@@ -95,3 +95,10 @@ network and separate-account negative tests are completed.
 - Only mark either audit complete after recording the observed results.
 
 Audit status: **SOURCE REVIEW COMPLETED; WINDOWS RUNTIME CHECKS OPEN.**
+
+
+## User Windows runtime observation — 2026-10-27
+
+An initial two-minute run on Windows 10, reported by the user, observed 7 related processes (OneKeePass.exe plus six msedgewebview2.exe descendants) and **zero sampled TCP records**. This is favorable evidence from TCP polling, not a complete absence-of-network proof (misses UDP, DNS and short connections).
+
+The same run could not retrieve the pipe ACL: `GetSecurityInfo` returned Win32 error `87` (invalid parameter). The script incorrectly passed `SE_FILE_OBJECT=1` for a named-pipe handle. The audit helper has been corrected to use `SE_KERNEL_OBJECT=6`. The initial `BroadAccessDetected: False` value is **not evidence of a restrictive DACL**; no SDDL or ACEs were actually retrieved. Recheck using the corrected helper; a five-second run is sufficient to inspect the pipe DACL.
