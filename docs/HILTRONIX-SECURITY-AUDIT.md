@@ -205,3 +205,10 @@ Do not close W-07 or the named-pipe security issue on the strength of source rev
 ## Named-pipe restricted-DACL remediation candidate (2026-10-27-03)
 
 Current Windows source builds each `\\.\pipe\openssh-ssh-agent` instance with a protected same-account/SYSTEM/Administrators DACL, using Tokio's `create_with_security_attributes_raw` API; the SDDL is derived from the current process-token user SID and does not include Everyone or Anonymous. Existing `ssh-agent-lib` protocol handling remains unchanged. **Unverified until the Windows build and same-account/other-account runtime tests pass.** See the October 27 Windows security review for acceptance requirements.
+
+
+## P-01 follow-up runtime verification (2026-10-27)
+
+User-provided Windows output from revised `2026-10-27-03` confirms the live `\\.\pipe\openssh-ssh-agent` ACL is protected and grants access only to SYSTEM, Builtin Administrators and the current Windows account. There are no Everyone or Anonymous ACEs. `ssh-add -l` enumerates the user's two ED25519 identities, and KiTTY and WinSCP both authenticate using OKP keys after the change. The Windows build succeeded in CI.
+
+**Status:** The restricted ACL and supported-client compatibility are validated on the user's machine. A *different, non-administrator account* has not yet tested access denial. The network audit observed zero sampled TCP connections, but DNS/UDP and transient traffic still require WFP/ETW testing.
