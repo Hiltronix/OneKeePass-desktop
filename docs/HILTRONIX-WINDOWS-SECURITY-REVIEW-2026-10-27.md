@@ -114,3 +114,18 @@ D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;<current account SID>)
 The SID is derived at runtime from the OneKeePass process token. Every instance, including replacements created after clients connect, uses the same descriptor. The listener also explicitly rejects remote pipe clients. Agent key storage, signing approval, timeout handling, Pageant interface and standard pipe name are unchanged.
 
 **Validation is pending:** a Windows/MSVC compile, the actual pipe ACL inspection (`QueryResult: 0`, no Everyone or Anonymous ACE), `ssh-add -l`, SSH authentication, and an unprivileged second-account access test. A change to the source is not proof of effective isolation. Previous 2026-10-27-02 binary still exposes the default DACL.
+
+
+## P-01 Windows runtime verification — 2026-10-27 (revision 2026-10-27-03)
+
+The user installed the revised Windows build and provided an actual live named-pipe ACL inspection, rather than relying on source code alone:
+
+- Windows security query returned `QueryResult: 0` with no query error.
+- SDDL DACL: `D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;<current account SID>)`.
+- The only allow ACEs were SYSTEM (`S-1-5-18`), Builtin Administrators (`S-1-5-32-544`), and the current user (`0x001F01FF`, full control). No Everyone (`S-1-1-0`) or Anonymous (`S-1-5-7`) ACEs were present.
+- `BroadAccessDetected: false`.
+- `ssh-add -l` successfully enumerated two ED25519 identities.
+- The user confirmed **both KiTTY and WinSCP successfully authenticate with OKP keys** after the ACL change.
+- The accompanying 5-second TCP sample observed zero TCP connections.
+
+**Conclusion:** The restricted DACL, normal OpenSSH identity enumeration, and KiTTY/WinSCP compatibility are **runtime validated**. A deliberate cross-account negative-access test has **not** yet been performed; elevated Administrators and SYSTEM intentionally retain access. Network isolation remains only *partially* tested because periodic TCP sampling omits transient connections and UDP/DNS.
