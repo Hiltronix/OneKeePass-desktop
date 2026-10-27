@@ -53,6 +53,10 @@ jobs:
 
           # Changes are restricted to patch versions within existing release
           # lines. No RSA algorithm substitution, key handling, or core change.
+          # 2026-10-23 RUSTSEC-2026-0387: the 0.7 branch has a same-series
+          # patched 0.7.6. Do not force upgrade of the distinct 0.5.x family;
+          # that requires dependency ancestry, feature and API review.
+          upgrade crypto-bigint@0.7.5 0.7.6
           upgrade ctutils 0.4.4
           upgrade rustls 0.23.46
           upgrade rustls-webpki 0.103.16

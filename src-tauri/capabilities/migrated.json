@@ -20,8 +20,6 @@
     "global-shortcut:allow-unregister-all",
     "process:allow-exit",
     "clipboard-manager:allow-read-text",
-    "clipboard-manager:allow-write-text",
-    "shell:default",
-    "process:default"
+    "clipboard-manager:allow-write-text"
   ]
 }

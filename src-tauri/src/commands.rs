@@ -7,7 +7,8 @@ use std::io::ErrorKind;
 
 use log::{debug, info};
 use std::fs::read_to_string;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 use uuid::Uuid;
 
 use crate::app_state::SystemInfoWithPreference;
@@ -47,6 +48,40 @@ pub struct UpdatePayload {
 // See the 'From' implementation in onekeepass-core/src/error.rs
 
 pub type Result<T> = std::result::Result<T, String>;
+
+// Temporary decrypted attachments opened in external viewers. Keep a separate
+// list per database so locking DB A does not remove DB B's temporary files.
+// Normal quit/startup still sweep the shared okp_cache directory.
+static TEMP_ATTACHMENTS_BY_DB: OnceLock<Mutex<HashMap<String, Vec<PathBuf>>>> = OnceLock::new();
+
+fn temp_attachment_registry() -> &'static Mutex<HashMap<String, Vec<PathBuf>>> {
+    TEMP_ATTACHMENTS_BY_DB.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+pub(crate) fn remove_temporary_attachments_for_db(db_key: &str) {
+    let files = {
+        let mut registry = temp_attachment_registry().lock().unwrap();
+        registry.remove(db_key).unwrap_or_default()
+    };
+    let mut retry = Vec::new();
+    for path in files {
+        match std::fs::remove_file(&path) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => {
+                // External editors may keep files open on Windows. Do not pretend
+                // that deletion succeeded; retain the path for a later retry.
+                log::warn!("Unable to remove decrypted attachment temp file: {e}");
+                retry.push(path);
+            }
+        }
+    }
+    if !retry.is_empty() {
+        let mut registry = temp_attachment_registry().lock().unwrap();
+        registry.entry(db_key.to_owned()).or_default().extend(retry);
+    }
+}
+
 
 #[tauri::command]
 pub(crate) async fn init_timers<R: Runtime>(
@@ -806,9 +841,17 @@ pub(crate) async fn save_attachment_as_temp_file(
         let _ = std::fs::remove_file(&path);
         return Err(e.into());
     }
-    path.to_str()
-        .map(str::to_owned)
-        .ok_or_else(|| "Attachment temp path is not UTF-8".to_string())
+    let path_string = path
+        .to_str()
+        .ok_or_else(|| "Attachment temp path is not UTF-8".to_string())?
+        .to_owned();
+    temp_attachment_registry()
+        .lock()
+        .unwrap()
+        .entry(db_key.to_owned())
+        .or_default()
+        .push(path);
+    Ok(path_string)
 }
 
 #[command]
@@ -994,6 +1037,7 @@ pub(crate) async fn close_kdbx(
     // Safe to call on non-macOS / non-sandboxed paths — it's a HashMap remove.
     app_state.release_scoped_access(&mas::ScopedAccessKey::Db(db_key.to_string()));
     kp_service::close_kdbx(db_key)?;
+    remove_temporary_attachments_for_db(db_key);
     app_state.remove_app_home_backup_file(db_key);
     // Drop any in-memory connection config cached while this remote db was open.
     crate::remote_storage::clear_cached_connection_config(db_key);
@@ -1070,6 +1114,9 @@ pub(crate) async fn lock_kdbx(_db_key: &str) -> Result<()> {
     // regardless of the lock_kdbx stub above: a locked database must not keep
     // serving its keys, so the agent's in-memory copy is wiped here.
     ssh_agent::clear_keys_for_db(_db_key);
+    // This DB is locked: its decrypted viewer files should not remain on disk.
+    // Failures (e.g. a viewer holding a file open) are logged and retried later.
+    remove_temporary_attachments_for_db(_db_key);
 
     Ok(())
 }

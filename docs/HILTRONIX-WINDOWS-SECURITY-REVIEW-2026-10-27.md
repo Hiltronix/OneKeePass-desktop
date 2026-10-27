@@ -138,3 +138,10 @@ Audit identified two renderer-callable privileged commands requiring removal: an
 Residual network-capable features in core (`favicon`, `reqwest_dav`) remain linked despite Windows network guards; feature pruning cannot be represented as a no-risk refactor without preserving local-icon import and auditing shared-core Cargo features. No network-facing runtime exploit of the RSA advisory was found in the reviewed Windows agent: its RSA signing is through restricted local IPC and confirmation controls. `RUSTSEC-2023-0071` remains present and **unpatched** per the September 2026 RustSec advisory; do not interpret local-only use as a universal security fix.
 
 Validation: Windows build, advisory rescan, Windows Hello rejection/success, local icons, SSH agent regression; external temporary attachment lifecycle and WFP/ETW traffic tracing still pending.
+
+## Revision 2026-10-27-05: sensitive-file and capability hardening
+
+- Per-database decrypted viewer attachment tracking enables cleanup on lock, close and OS suspend without deleting another unlocked database's attachments.
+- Windows locked files may resist deletion; those failures remain recorded for retry and the usual startup/exit sweep. The feature cannot guarantee secure deletion of underlying SSD blocks, cloud backups or editors' copies.
+- Removes redundant `shell:default`/`process:default` Tauri permissions; explicit `shell:allow-open` and `process:allow-exit` remain so local user actions keep working.
+- Rust advisory scan identified freshly disclosed `RUSTSEC-2026-0387` in `crypto-bigint` 0.5.5 and 0.7.5; patched 0.7.6 is targeted by the controlled lockfile-update workflow. The 0.5.x chain is not blindly upgraded across incompatible releases.

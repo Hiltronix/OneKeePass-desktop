@@ -51,6 +51,15 @@ if (-not $MainSource.Contains("commands::unlock_kdbx_with_biometric,")) {
 $Configuration = Get-Content -Raw (Join-Path $Root "src-tauri/tauri.conf.json") | ConvertFrom-Json
 $Version = $Configuration.version
 $BrowserArgs = $Configuration.app.windows[0].additionalBrowserArgs
+# Prevent redundant Tauri default grants from widening UI authority.
+$Permissions = @(Get-Content -Raw (Join-Path $Root "src-tauri/capabilities/migrated.json") | ConvertFrom-Json).permissions
+foreach ($Unnecessary in @("shell:default", "process:default", "shell:allow-execute")) {
+    if ($Permissions -contains $Unnecessary) { throw "Unsafe/redundant capability: $Unnecessary" }
+}
+foreach ($Required in @("shell:allow-open", "process:allow-exit")) {
+    if ($Permissions -notcontains $Required) { throw "Missing required capability: $Required" }
+}
+
 # Ensure the release continues to carry the per-application WebView2 network restrictions.
 foreach ($Flag in @("--disable-background-networking", "--disable-component-update", "--disable-sync", "--proxy-server=http://127.0.0.1:9")) {
     if (-not $BrowserArgs -or -not $BrowserArgs.Contains($Flag)) {

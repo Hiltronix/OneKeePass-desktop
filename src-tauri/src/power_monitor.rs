@@ -61,8 +61,9 @@ fn lock_all_unlocked_dbs() -> Vec<String> {
     };
 
     for db_key in &keys {
-        if let Err(e) = kp_service::lock_kdbx(db_key) {
-            error!("lock-on-suspend: failed to lock a database: {}", e);
+        match kp_service::lock_kdbx(db_key) {
+            Ok(()) => crate::commands::remove_temporary_attachments_for_db(db_key),
+            Err(e) => error!("lock-on-suspend: failed to lock a database: {}", e),
         }
         ssh_agent::clear_keys_for_db(db_key);
     }
