@@ -147,8 +147,8 @@
 
       [mui-stack {:sx {:mt 3 :align-items "center"}}
        (cond
-         (or (= biometric-type const/TOUCH_ID) (= biometric-type const/FACE_ID)
-             (= biometric-type const/WINDOWS_HELLO))
+         (or (= biometric-type const/TOUCH_ID)
+             (= biometric-type const/FACE_ID))
          [mui-icon-button {:aria-label "fingerprint"
                            :color "secondary"
                            :on-click #(cmn-events/unlock-current-db biometric-type)}

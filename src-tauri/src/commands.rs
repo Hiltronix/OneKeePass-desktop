@@ -1121,15 +1121,14 @@ pub(crate) async fn lock_kdbx(_db_key: &str) -> Result<()> {
     Ok(())
 }
 
+// Touch ID / Face ID on macOS only: never compile on Windows.
+#[cfg(target_os = "macos")]
 #[command]
 pub(crate) async fn unlock_kdbx_with_biometric(db_key: &str) -> Result<kp_service::KdbxLoaded> {
     // Combine the biometric verification and the unlock in a single Rust command
     // so the success boolean never round-trips through JS. This removes the
-    // trivial bypass where the renderer could call the unlock command
-    // (unlock_kdbx_on_biometric_authentication) directly without a successful
-    // biometric. Works on macOS (Touch ID/Face ID) and Windows (Hello); it is
-    // never invoked on Linux, which has no biometric and uses credential re-entry
-    // (unlock_kdbx) - that path is untouched.
+    // trivial renderer bypass. Windows and Linux use password re-entry;
+    // only macOS builds compile/register this authenticated alternative.
     //
     // No unauthenticated renderer-callable unlock command is registered.
     if !biometric::authenticate_with_biometric(db_key) {

@@ -315,11 +315,8 @@
  (fn [{:keys [db]} [_event-id]]
    {:fx [[:bg-unlock-kdbx-with-biometric [(active-db-key db)]]]}))
 
-;; A single fused command performs the biometric verification AND the reveal
-;; in Rust, so the success boolean never round-trips through JS (removes the
-;; trivial renderer bypass). Replaces the earlier two-step flow
-;; (authenticate-with-biometric -> unlock-kdbx-on-biometric-authentication); those
-;; bg fns and their Tauri commands are retained but no longer used here.
+;; The fused biometric command is macOS-only. Windows always displays the
+;; master-password/key-file prompt on a locked database.
 (reg-fx
  :bg-unlock-kdbx-with-biometric
  (fn [[db-key]]

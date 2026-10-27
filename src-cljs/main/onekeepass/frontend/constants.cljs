@@ -141,15 +141,12 @@
 
 (def DB_CHANGED "DbFileContentChangeDetected")
 (def MERGE_FAILED_CREDENTIALS_CHANGED "MergeFailedCredentialsChanged")
-;; Marker error returned by unlock_kdbx_with_biometric when the biometric
-;; verification (Touch ID / Face ID / Windows Hello) is cancelled or fails, so
-;; the unlock flow falls back to the password dialog instead of a hard error.
+;; Marker error returned when macOS Touch ID / Face ID verification
+;; is cancelled or fails; the unlock flow falls back to the password dialog.
 (def BIOMETRIC_AUTH_FAILED "BiometricAuthenticationFailed")
 
 (def TOUCH_ID "TouchID")
 (def FACE_ID "FaceID")
-;; Windows Hello (PIN or biometric) re-unlock; matches biometric.rs on Windows.
-(def WINDOWS_HELLO "WindowsHello")
 (def NO_BIOMETRIC "None")
 
 (def MACOS "macos")

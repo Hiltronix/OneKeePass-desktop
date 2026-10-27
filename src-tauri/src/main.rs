@@ -317,6 +317,7 @@ fn main() {
             // commands::tokio_runtime_shutdown,
             // commands::tokio_runtime_start,
             commands::unlock_kdbx,
+            #[cfg(target_os = "macos")]
             commands::unlock_kdbx_with_biometric,
             commands::update_browser_ext_support_preference,
             commands::update_db_with_imported_csv,

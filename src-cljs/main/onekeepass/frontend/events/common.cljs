@@ -264,7 +264,11 @@
             (assoc :app-preference preference)
             (assoc :standard-dirs standard-dirs)
             (assoc :path-sep path-sep)
-            (assoc :biometric-type-available biometric-type-available)
+            ;; Windows always uses master-password/key-file re-entry.
+            (assoc :biometric-type-available
+                   (if (= os-name const/WINDOWS)
+                     const/NO_BIOMETRIC
+                     biometric-type-available))
             (assoc :os-name os-name)
             (assoc :os-version os-version)
             (assoc :arch arch)

@@ -84,16 +84,10 @@ tauri-plugin-global-shortcut = "2"
 [target."cfg(target_os = \"windows\")".dependencies]
 winreg = "0.55.0"
 
-## Windows Hello re-unlock (biometric.rs) via UserConsentVerifier, and the
-## Credential Manager backed enc-key store (key_secure/windows.rs). The
-## higher-level `windows` crate is used (not windows-sys) because the Hello APIs
-## are WinRT (Security_Credentials_UI + Foundation for IAsyncOperation::get);
-## the Credential Manager Win32 calls use Win32_Security_Credentials +
-## Win32_Foundation. This coexists with the windows-sys 0.52 dep above (separate
-## crates).
+## Win32 Credential Manager retains the ephemeral session encryption key
+## needed by the in-memory KDBX lock. Windows Hello/PIN/biometric unlock
+## and the WinRT UI API are not compiled into this edition.
 windows = { version = "0.58", features = [
-    "Foundation",
-    "Security_Credentials_UI",
     "Win32_Foundation",
     "Win32_Security_Credentials",
 ] }

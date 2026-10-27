@@ -44,8 +44,23 @@ foreach ($ForbiddenCommand in @(
         throw "Unsafe/deprecated Tauri command remains registered: $ForbiddenCommand"
     }
 }
-if (-not $MainSource.Contains("commands::unlock_kdbx_with_biometric,")) {
-    throw "Authenticated biometric-unlock command is not registered."
+# Keep the authenticated macOS path but exclude biometric unlock from Windows
+# both at registration and function-compilation level.
+if ($MainSource -notmatch '(?s)#\[cfg\(target_os = "macos"\)\]\s*commands::unlock_kdbx_with_biometric,') {
+    throw "Biometric unlock registration must be macOS-only."
+}
+$CommandSource = Get-Content -Raw (Join-Path $Root "src-tauri/src/commands.rs")
+if ($CommandSource -notmatch '(?s)#\[cfg\(target_os = "macos"\)\]\s*#\[command\]\s*pub\(crate\) async fn unlock_kdbx_with_biometric') {
+    throw "Biometric unlock implementation must be macOS-only."
+}
+$BiometricSource = Get-Content -Raw (Join-Path $Root "src-tauri/src/biometric.rs")
+$CargoSource = Get-Content -Raw (Join-Path $Root "src-tauri/Cargo.toml")
+$FrontendConstants = Get-Content -Raw (Join-Path $Root "src-cljs/main/onekeepass/frontend/constants.cljs")
+if ($BiometricSource.Contains("UserConsentVerifier") -or
+    $BiometricSource.Contains("windows_hello") -or
+    $CargoSource.Contains('"Security_Credentials_UI"') -or
+    $FrontendConstants.Contains('WindowsHello')) {
+    throw "Windows Hello code, capability or UI marker is still present."
 }
 
 $Configuration = Get-Content -Raw (Join-Path $Root "src-tauri/tauri.conf.json") | ConvertFrom-Json
