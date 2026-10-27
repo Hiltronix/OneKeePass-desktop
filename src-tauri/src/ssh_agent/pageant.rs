@@ -254,15 +254,20 @@ unsafe fn handle_copydata(lparam: LPARAM) -> LRESULT {
         return 0;
     }
 
+    // Report IPC activity without logging request content, mapping names, or keys.
+    log::info!("SSH agent: Pageant IPC request received");
+
     // WM_COPYDATA only guarantees cbData bytes. OpenFileMappingA expects a
     // NUL-terminated name; validate that termination lies inside the supplied
     // buffer before passing it to the Win32 string API.
     let name_len = cds.cbData as usize;
     if name_len == 0 || name_len > 256 {
+        log::warn!("SSH agent: Pageant request rejected: invalid mapping-name length");
         return 0;
     }
     let name = std::slice::from_raw_parts(cds.lpData as *const u8, name_len);
     if name[name_len - 1] != 0 || name[..name_len - 1].contains(&0) {
+        log::warn!("SSH agent: Pageant request rejected: invalid mapping-name termination");
         return 0;
     }
 
@@ -273,6 +278,10 @@ unsafe fn handle_copydata(lparam: LPARAM) -> LRESULT {
         cds.lpData as *const u8,
     );
     if mapping == 0 {
+        log::warn!(
+            "SSH agent: Pageant OpenFileMappingA failed: {}",
+            std::io::Error::last_os_error()
+        );
         return 0;
     }
 
@@ -298,6 +307,10 @@ unsafe fn serve_mapping(mapping: HANDLE) -> LRESULT {
     // an out-of-bounds read/write after claiming a longer framed message.
     let view = MapViewOfFile(mapping, FILE_MAP_WRITE, 0, 0, AGENT_MAX_MSGLEN);
     if view.Value.is_null() {
+        log::warn!(
+            "SSH agent: Pageant MapViewOfFile failed: {}",
+            std::io::Error::last_os_error()
+        );
         return 0;
     }
 
@@ -314,6 +327,7 @@ unsafe fn serve_view(view: *mut u8) -> LRESULT {
     let len_bytes = std::slice::from_raw_parts(view, 4);
     let req_len = u32::from_be_bytes([len_bytes[0], len_bytes[1], len_bytes[2], len_bytes[3]]) as usize;
     if req_len == 0 || req_len > AGENT_MAX_MSGLEN - 4 {
+        log::warn!("SSH agent: Pageant request rejected: invalid frame length");
         return 0;
     }
 
@@ -321,10 +335,12 @@ unsafe fn serve_view(view: *mut u8) -> LRESULT {
 
     let Some(store) = store_slot().read().unwrap().clone() else {
         // Agent stopped between window creation and this request.
+        log::warn!("SSH agent: Pageant request rejected: no active agent store");
         return 0;
     };
 
     let Some(response) = process_request(store, body) else {
+        log::warn!("SSH agent: Pageant request rejected: protocol processing failed");
         return 0;
     };
 
@@ -338,6 +354,7 @@ unsafe fn serve_view(view: *mut u8) -> LRESULT {
     let dst = std::slice::from_raw_parts_mut(view, total);
     dst[..4].copy_from_slice(&(response.len() as u32).to_be_bytes());
     dst[4..].copy_from_slice(&response);
+    log::info!("SSH agent: Pageant IPC response sent");
     1
 }
 
@@ -348,6 +365,7 @@ unsafe fn serve_view(view: *mut u8) -> LRESULT {
 fn process_request(store: Arc<RwLock<SshAgentStore>>, body: &[u8]) -> Option<Vec<u8>> {
     let mut reader = body;
     let request = Request::decode(&mut reader).ok()?;
+    log::info!("SSH agent: Pageant protocol request type {}", body[0]);
 
     let mut session = AgentSession::new(store);
     // SendMessage is synchronous, so we must finish here. block_on runs on this

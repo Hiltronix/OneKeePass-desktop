@@ -202,7 +202,12 @@ pub(crate) fn start() -> AgentStatus {
     // Build the store from all currently-open databases before binding.
     {
         let sources = kp_service::ssh_agent::list_ssh_agent_key_sources();
+        log::info!("SSH agent: {} enabled SSH Key source(s) found on startup", sources.len());
         rt.store.write().unwrap().set_all(sources);
+        log::info!(
+            "SSH agent: {} usable SSH identity/identities available",
+            rt.store.read().unwrap().len()
+        );
     }
 
     #[cfg(unix)]
@@ -368,6 +373,10 @@ pub(crate) fn reload_keys_for_db(db_key: &str) {
         return;
     }
     let sources = kp_service::ssh_agent::ssh_agent_key_sources_for_db(db_key);
+    log::info!(
+        "SSH agent: unlocked database supplied {} enabled SSH Key source(s)",
+        sources.len()
+    );
     if rt.mode == Some(SshAgentMode::Client) {
         match rt.client.replace_db(db_key, sources) {
             Ok(()) => {
@@ -386,7 +395,7 @@ pub(crate) fn reload_keys_for_db(db_key: &str) {
     }
     let mut store = rt.store.write().unwrap();
     store.replace_db(db_key, sources);
-    log::debug!("SSH agent: now serving {} key(s)", store.len());
+    log::info!("SSH agent: now serving {} usable SSH identity/identities", store.len());
 }
 
 // Removes (and zeroizes) the agent's keys for one database (lock / close).

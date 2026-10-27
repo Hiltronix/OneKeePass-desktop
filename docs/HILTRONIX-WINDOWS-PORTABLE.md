@@ -115,3 +115,17 @@ Revision 2026-10-26-02 only used Tauri `WebviewWindow::set_icon`, which on Windo
 The built-in Pageant listener now creates a hidden top-level Windows window rather than a message-only window. PuTTY-compatible clients locate the agent using `FindWindow("Pageant", "Pageant")`, which cannot discover the previous message-only window. A startup check now verifies that the listener is discoverable. The existing OpenSSH named pipe and signing/confirmation code are unchanged.
 
 **Windows acceptance test:** Enable OneKeePass SSH Agent Mode, unlock a disposable database containing an SSH Key entry enabled for the agent, and verify that KiTTY and WinSCP can authenticate with Pageant/agent support enabled and without a private-key file configured in those clients. Check the OneKeePass log for `SSH agent: Pageant window created`. Lock the database and verify that the key becomes unavailable. Only claim compatibility after testing the built application on Windows.
+
+## SSH Agent / KiTTY Pageant troubleshooting (2026-10-27-01)
+
+Revision 2026-10-27-01 adds **diagnostic logging only** to distinguish (1) an SSH Key entry not opted into the agent, (2) an entry failing private-key decoding, (3) a client not contacting the Pageant window, and (4) a Pageant IPC request rejected in the Windows shared-memory / owner-SID / protocol path. No private keys, passphrases, shared-memory names or request bytes are logged.
+
+With Agent Mode enabled and the KDBX database unlocked, inspect the SSH Agent settings **Keys served** count, and the portable log `onekeepass-data/logs/onekeepass.log` for:
+
+- `SSH agent: unlocked database supplied N enabled SSH Key source(s)`
+- `SSH agent: now serving N usable SSH identity/identities`
+- `SSH agent: Pageant IPC request received` and `SSH agent: Pageant IPC response sent`, or specific IPC rejection warnings.
+
+If no sources are found, the entry must be of the **SSH Key** type and explicitly have **Add to SSH Agent** enabled (merely attaching a key to an ordinary entry is not sufficient). A parsing error emits `skipping invalid SSH Key entry` without exposing the private key. If keys are served, but **no Pageant IPC request** appears during a KiTTY attempt, investigate KiTTY's client configuration / agent discovery. OpenSSH uses a different transport, which can be independently checked with `ssh-add -l` in PowerShell. No new network access is added.
+
+**Validation:** The Windows portable build must compile before use. The result of any PuTTY-family runtime authentication remains unverified until the client test succeeds.
