@@ -770,7 +770,9 @@
 ;; there are several of them
 (defn- drop-entry-list-otps [app-db db-key]
   (if (contains? app-db db-key)
-    (update app-db db-key dissoc :entry-list-otp)
+    ;; Never retain matched entry titles or protected-field search terms
+    ;; after a database is locked (manual, timeout, bulk lock or suspend).
+    (update app-db db-key dissoc :entry-list-otp :search)
     app-db))
 
 #_(defn locked? []
@@ -1133,7 +1135,11 @@
 (reg-event-fx
  :common/change-active-db-complete
  (fn [{:keys [db]} [_event-id db-key]]
-   {:db (assoc db :current-db-file-name db-key)
+   {:db (let [previous-key (:current-db-file-name db)]
+          (cond-> (assoc db :current-db-file-name db-key)
+            ;; Drop stale asynchronous search results when changing databases.
+            (and previous-key (not= previous-key db-key))
+            (update previous-key dissoc :search)))
     :fx [[:bg-set-active-db-key db-key]
          ;; Same routing as after an unlock: a flagged change is shown straight
          ;; away, otherwise a remote db gets a fresh mtime check. No watcher

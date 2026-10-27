@@ -75,6 +75,22 @@ $SearchSource = Get-Content -Raw (Join-Path $Root "src-cljs/main/onekeepass/fron
 if ($SearchSource -notmatch ':autoComplete\s+"off"') {
     throw "Search field does not explicitly disable HTML autocomplete."
 }
+# Search is an always-present toolbar control. Never restore the modal dialog.
+$ToolbarSource = Get-Content -Raw (Join-Path $Root "src-cljs/main/onekeepass/frontend/tool_bar.cljs")
+$SearchEventsSource = Get-Content -Raw (Join-Path $Root "src-cljs/main/onekeepass/frontend/events/search.cljs")
+$KeyboardSource = Get-Content -Raw (Join-Path $Root "src-cljs/main/onekeepass/frontend/keyboard_shortcuts.cljs")
+$TauriEventsSource = Get-Content -Raw (Join-Path $Root "src-cljs/main/onekeepass/frontend/events/tauri_events.cljs")
+$CommonEventsSource = Get-Content -Raw (Join-Path $Root "src-cljs/main/onekeepass/frontend/events/common.cljs")
+if ($ToolbarSource -notmatch '\[search/toolbar-search\]' -or
+    $ToolbarSource.Contains('search/search-dialog-main') -or
+    $SearchSource -notmatch 'mui-popper' -or
+    $SearchSource -notmatch 'toolbar-search-input' -or
+    $KeyboardSource -notmatch 'search-events/focus-search-field' -or
+    $TauriEventsSource -notmatch 'search-events/focus-search-field' -or
+    $SearchEventsSource -notmatch 'eligible-request\?' -or
+    $CommonEventsSource -notmatch 'dissoc :entry-list-otp :search') {
+    throw "Permanent toolbar search, keyboard focus or lock-safe results guard is missing."
+}
 $Version = $Configuration.version
 $BrowserArgs = $Configuration.app.windows[0].additionalBrowserArgs
 # Prevent redundant Tauri default grants from widening UI authority.

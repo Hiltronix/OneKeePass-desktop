@@ -6,6 +6,7 @@
    [onekeepass.frontend.background :as bg]
    [onekeepass.frontend.events.common :as cmn-events]
    [onekeepass.frontend.events.entry-form-ex :as form-events]
+   [onekeepass.frontend.events.search :as search-events]
    [onekeepass.frontend.constants :as const :refer
     [BROWSER_CONNECTION_REQUEST_EVENT CLOSE_REQUESTED DATABASES_LOCKED DB_FILE_CHANGED_EVENT FILE_DROP
      MAIN_WINDOW_EVENT MENU_ID_ABOUT OTP_TOKEN_UPDATE_EVENT PASSKEY_DATA_CHANGED_EVENT
@@ -110,7 +111,7 @@
       (dispatch [:common/save-db-file-as true])
 
       (= menu-id const/MENU_ID_SEARCH)
-      (dispatch [:search/dialog-show])
+      (search-events/focus-search-field)
 
       (= menu-id const/APP_SETTINGS)
       (dispatch [:app-settings/read-start])

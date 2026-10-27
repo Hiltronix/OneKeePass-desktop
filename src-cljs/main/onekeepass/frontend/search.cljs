@@ -1,151 +1,135 @@
 (ns onekeepass.frontend.search
+  "Permanent toolbar search with an anchored, non-modal results panel."
   (:require [clojure.string :as str]
-            [onekeepass.frontend.common-components :refer [list-items-factory]]
             [onekeepass.frontend.db-icons :refer [render-entry-icon]]
             [onekeepass.frontend.events.common :as cmn-events]
             [onekeepass.frontend.events.search :as sch-event]
-            [onekeepass.frontend.mui-components :as m :refer [mui-typography
-                                                              mui-alert
-                                                              mui-avatar
-                                                              mui-button
-                                                              mui-dialog
-                                                              mui-dialog-actions
-                                                              mui-dialog-content
-                                                              mui-dialog-title
-                                                              mui-icon-button
-                                                              mui-icon-clear-outlined
-                                                              mui-icon-more-vert
-                                                              mui-input-adornment
-                                                              mui-list-item-avatar
-                                                              mui-list-item-button
-                                                              mui-list-item-secondary-action
-                                                              mui-list-item-text
-                                                              mui-stack
-                                                              mui-tooltip
-                                                              get-theme-color]]
-            [onekeepass.frontend.translation :as t :refer-macros [tr-dlg-title tr-l tr-h]]
+            [onekeepass.frontend.mui-components :as m
+             :refer [mui-alert mui-avatar mui-box mui-icon-button
+                     mui-icon-clear-outlined mui-icon-search mui-input-adornment
+                     mui-list-item-avatar mui-list-item-button mui-list-item-text
+                     mui-paper mui-popper mui-stack mui-typography]]
+            [onekeepass.frontend.translation :as t :refer-macros [tr-h]]
             [reagent.core :as r]))
 
-#_(set! *warn-on-infer* true)
+(defn- result-row [db-key item selected-id]
+  (let [uuid (:uuid item)]
+    ^{:key uuid}
+    [mui-list-item-button
+     {:selected (= selected-id uuid)
+      :data-search-selected (if (= selected-id uuid) "true" "false")
+      :divider true
+      ;; Keep keyboard focus on the search input so arrows/Enter remain active.
+      :on-mouse-down #(.preventDefault %)
+      :on-click (fn [_] (sch-event/open-result uuid))}
+     [mui-list-item-avatar
+      [mui-avatar {:variant "rounded" :sx {:border-radius 2}}
+       [render-entry-icon {:db-key db-key
+                           :icon-id (:icon-id item)
+                           :custom-icon-uuid (:custom-icon-uuid item)}]]]
+     [mui-list-item-text {:primary (:title item)
+                          :secondary (:secondary-title item)}]]))
 
-(defn row-item
-  "Renders a list item. 
-  The arg 'props' is a map passed from 'fixed-size-list'
-  "
-  []
-  (fn [props]
-    (let [items  (sch-event/search-result-entry-items)
-          item (nth @items (:index props))
-          selected-id (sch-event/selected-entry-id)
-          active-db-key @(cmn-events/active-db-key)]
-      ;; Need to use mui-list-item-button instead of mui-list-item so that focus to the list works
-      ;; while using 'Tab' key. The other places the tab navigation works when mui-list-item is used
-      ;; As per API doc mui-list-item autoFocus prop is deprecated and recommended to use mui-list-item-button
-      [mui-list-item-button {:style (:style props)
-                             :divider true
-                             :value (:uuid item)
-                             :onDoubleClick (fn []
-                                              (sch-event/show-selected-entry-item (:uuid item)))
-                             :on-click (fn [_e]
-                                         (sch-event/search-selected-entry-id-update (:uuid item)))
-                             :selected (if (= @selected-id (:uuid item)) true false)
-                             ;; secondaryAction will work with mui-list-item-button and we need to use
-                             ;; mui-list-item-secondary-action as last child in mui-list-item-button
-                             }
-       [mui-list-item-avatar
-        ;; Rounded-square avatar with a subtle tinted background, so both built-in
-        ;; SVG icons and custom PNG icons sit on a consistent surface in the list.
-        [mui-avatar {:variant "rounded"
-                     :sx {:bgcolor (get-theme-color :selected-item)
-                          :border-radius 2}}
-         [render-entry-icon {:db-key active-db-key
-                             :icon-id (:icon-id item)
-                             :custom-icon-uuid (:custom-icon-uuid item)}]]]
-       [mui-list-item-text
-        ;; We can use react node for primary and secondary props
-        ;; e.g :primary (r/as-element [:span (str "Primary:" (:title  item))])
-        {:primary (:title  item)  :secondary (:secondary-title item)}]
+(defn- scroll-selected-result []
+  ;; The panel is scrollable; keep keyboard selection visible.
+  (js/requestAnimationFrame
+   (fn [_]
+     (when-let [el (.querySelector js/document
+                                  "[data-search-selected='true']")]
+       (.scrollIntoView el #js {:block "nearest" :inline "nearest"})))))
 
-       (when (= @selected-id (:uuid item))
-         [mui-list-item-secondary-action
-          [mui-tooltip {:title "Show Details" :enterDelay 2000}
-           [mui-icon-button {:edge "end"
-                             :on-click (fn []
-                                         (sch-event/show-selected-entry-item (:uuid item)))}
-            [mui-icon-more-vert]]]])])))
+(defn- search-key-down [^js/Event event data]
+  (let [key (.-key event)
+        items (get-in data [:result :entry-items])]
+    (case key
+      "ArrowDown" (do (.preventDefault event)
+                      (sch-event/navigate-results 1)
+                      (scroll-selected-result))
+      "ArrowUp" (do (.preventDefault event)
+                    (sch-event/navigate-results -1)
+                    (scroll-selected-result))
+      "Enter" (when (seq items)
+                (.preventDefault event)
+                (sch-event/open-active-result data))
+      "Escape" (do (.preventDefault event) (sch-event/hide-results))
+      nil)))
 
-(defn search-result-list-content [matched-entries]
-  (let [result-items (list-items-factory matched-entries #_(sch-event/search-result-entry-items) row-item :list-style {})]
-    [result-items]))
+(defn toolbar-search []
+  (let [{:keys [term result error-text not-matched pending? popup-open? selected-entry-id]
+         :as data} @(sch-event/search-data)
+        db-key @(cmn-events/active-db-key)
+        locked? @(cmn-events/locked?)
+        entries (:entry-items result)
+        results-visible? (and (not locked?) popup-open? (not (str/blank? term)))
+        ;; The element is already mounted by the time a focused field can open
+        ;; the popper. Anchor to its border rather than to the cursor/caret.
+        anchor (when results-visible?
+                 (.getElementById js/document "toolbar-search-anchor"))]
+    [mui-box {:id "toolbar-search-anchor"
+              :sx {:width {:xs 190 :sm 245 :md 295}
+                   :maxWidth "35vw"
+                   :minWidth 165}}
+     [m/text-field
+      {:id "toolbar-search-input"
+       :aria-label "Search database entries"
+       :placeholder "Search entries..."
+       :variant "outlined"
+       :size "small"
+       :fullWidth true
+       :disabled locked?
+       :value (or term "")
+       ;; Additional defense; the WebView2 general autofill switch is disabled.
+       :autoComplete "off"
+       :slotProps {:htmlInput {:autoComplete "off" :spellCheck false}
+                   :input {:startAdornment
+                           (r/as-element
+                            [mui-input-adornment {:position "start"}
+                             [mui-icon-search {:fontSize "small"}]])
+                           :endAdornment
+                           (when-not (str/blank? term)
+                             (r/as-element
+                              [mui-input-adornment {:position "end"}
+                               [mui-icon-button
+                                {:size "small"
+                                 :aria-label "Clear search"
+                                 :on-mouse-down #(.preventDefault %)
+                                 :on-click (fn [_] (sch-event/search-term-clear))}
+                                [mui-icon-clear-outlined {:fontSize "small"}]]]))}}
+       :sx {:bgcolor "background.paper"
+            :borderRadius 1
+            "& .MuiInputBase-input" {:py "7px"}}
+       :on-change sch-event/search-term-update
+       :on-focus (fn [_] (sch-event/show-results))
+       :on-blur (fn [_] (sch-event/hide-results))
+       :on-key-down (fn [event] (search-key-down event data))}]
+     [mui-popper
+      {:open (boolean results-visible?)
+       :anchorEl anchor
+       :placement "bottom-end"
+       :disablePortal false
+       :sx {:zIndex 1500}}
+      [mui-paper {:elevation 7
+                  :dir (t/dir)
+                  :sx {:width 375
+                       :maxWidth "calc(100vw - 32px)"
+                       :mt 0.5
+                       :overflow "hidden"}}
+       [mui-stack {:sx {:maxHeight 300 :overflowY "auto"}}
+        (cond
+          error-text
+          [mui-alert {:severity "error"} error-text]
 
-(defn- focus-search-field []
-  (when-let [input (.getElementById js/document "search_fld")]
-    (.focus input)))
+          pending?
+          [mui-typography {:variant "body2" :sx {:p 2}} "Searching..."]
 
-(defn search-dialog [{:keys [dialog-show term not-matched error-text result]} _db-key]
-  (let [matched-entries (:entry-items result)
-        matched-count (count matched-entries)]
-    [mui-dialog {:open (if (nil? dialog-show) false dialog-show)
-                 :dir (t/dir)
-                 :slotProps {:transition {:onEntered (fn []
-                                                       (when-let [input (.getElementById js/document "search_fld")]
-                                                         (.focus input)
-                                                         (.select input)))}}
-                 :on-close (fn [_event reason]
-                             (when (= reason "escapeKeyDown")
-                               (sch-event/cancel-on-click)))
-                 :on-click #(.stopPropagation %)
-                 :sx {"& .MuiDialog-paper" {:width "85%"}}}
-     [mui-dialog-title (tr-dlg-title "search")]
-     [mui-dialog-content
-      [mui-stack
-       [m/text-field {:label (tr-l "searchTerm")
-                      :value term
-                      :id "search_fld"
-                      ;; Never request browser autocomplete; WebView2's general
-                      ;; autofill is also disabled globally in tauri.conf.json.
-                      :autoComplete "off"
-                      ;; Focus the search field whenever the dialog opens, including when a
-                      ;; previous search term is restored after viewing an entry.
-                      :autoFocus true
-                      ;;:on-key-press (enter-key-pressed-factory #(sch-event/search-on-click db-key term))
-                      :on-change sch-event/search-term-update ;; a fn that needs to accept an event object
-                      :variant "standard"
-                      :fullWidth true
-                      :slotProps {:input {:endAdornment (r/as-element
-                                                         [mui-input-adornment {:position "end" }
-                                                          [mui-icon-button
-                                                           {:edge false
-                                                            ;; Keep a pointer click from moving focus from the input
-                                                            ;; to the clear button before its click handler runs.
-                                                            :on-mouse-down #(.preventDefault %)
-                                                            :on-click (fn []
-                                                                        (sch-event/search-term-clear)
-                                                                        ;; Reassert focus after React commits the cleared value.
-                                                                        (js/requestAnimationFrame
-                                                                         (fn [_]
-                                                                           (focus-search-field))))}
-                                                           [mui-icon-clear-outlined]]])}}}]
-       (when (seq matched-entries)
-         [mui-stack {:sx {:mt 2 :height "250px"
-                          :background-color (get-theme-color :header-footer)}}
-          [search-result-list-content matched-entries]])
+          (seq entries)
+          (into [:<>] (map (fn [item] (result-row db-key item selected-entry-id)) entries))
 
-       (cond
-         (not (nil? error-text))
-         [mui-alert {:severity "error" :sx {:mt 1}} error-text]
+          (and not-matched (not (str/blank? term)))
+          [mui-alert {:severity "info"} (tr-h "noMatchingEntryFound")]
 
-         (> matched-count 0)
-         [mui-stack {:direction "row" :justify-content "space-between" :sx {:margin-top 1 :margin-bottom 1}}
-          [mui-typography (str (tr-h "noOfEntriesFound") " : "  matched-count)]
-          [mui-typography (tr-h "doubleClickOnEntry")]]
-
-         (and not-matched (not (str/blank? term)))
-         [mui-alert {:severity "warning" :sx {:mt 1}} (tr-h "noMatchingEntryFound")])]]
-
-
-     [mui-dialog-actions
-      [mui-button {:on-click sch-event/cancel-on-click} "Close"]]]))
-
-(defn search-dialog-main []
-  [search-dialog @(sch-event/dialog-data) @(cmn-events/active-db-key)])
+          :else nil)]
+       (when (seq entries)
+         [mui-typography {:variant "caption"
+                          :sx {:display "block" :px 2 :py 1}}
+          (str (count entries) " matching entries · ↑↓ select · Enter open")])]]]))

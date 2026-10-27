@@ -1,143 +1,198 @@
 (ns onekeepass.frontend.events.search
-  (:require
-   [re-frame.core :refer [reg-event-db reg-event-fx reg-fx reg-sub dispatch subscribe]]
-   [onekeepass.frontend.events.common :as cmn-events :refer [check-error
-                                                             assoc-in-key-db
-                                                             get-in-key-db
-                                                             active-db-key]]
-   [onekeepass.frontend.background :as bg]))
+  "Per-database, lock-aware toolbar search with debouncing and stale-reply guards."
+  (:require [clojure.string :as str]
+            [re-frame.core :refer [reg-event-db reg-event-fx reg-fx reg-sub dispatch subscribe]]
+            [onekeepass.frontend.events.common :refer [active-db-key check-error]]
+            [onekeepass.frontend.background :as bg]))
 
-(defn show-selected-entry-item [entry-uuid]
-  (dispatch [:entry-list/entry-selected-in-search-result entry-uuid])
-  (dispatch [:term-showing-in-form])
-  (dispatch [:search-dialog-hide]))
+(def ^:private search-delay-ms 200)
+(defonce ^:private search-timers (atom {}))
 
-(defn cancel-on-click []
-  (dispatch [:search-dialog-close]))
+(defn focus-search-field []
+  ;; Used by Ctrl-F and Edit > Search. An open modal should not be bypassed
+  ;; by this function's callers.
+  (when-not (.querySelector js/document ".MuiDialog-root")
+    (when-let [input (.getElementById js/document "toolbar-search-input")]
+      (when-not (.-disabled input)
+      (.focus input)
+      (.select input)
+        (dispatch [:search/show-results])))))
 
 (defn search-term-update [^js/Event e]
-  (dispatch [:search-term-update (->  e .-target .-value)]))
+  (dispatch [:search/term-update (-> e .-target .-value)]))
 
 (defn search-term-clear []
-  (dispatch [:search-term-clear]))
+  (dispatch [:search/clear]))
 
-(defn search-dialog-show []
-  (dispatch [:search/dialog-show]))
+(defn show-results []
+  (dispatch [:search/show-results]))
 
-(defn search-selected-entry-id-update [uuid]
-  (dispatch [:search-selected-entry-id-update uuid]))
+(defn hide-results []
+  (dispatch [:search/hide-results]))
 
-(defn search-result-entry-items
-  "Returns an atom that has a list of all search term matched entry items "
-  []
-  (subscribe [:search-result-entry-items]))
+(defn navigate-results [direction]
+  (dispatch [:search/navigate direction]))
 
-(defn selected-entry-id
-  []
-  (subscribe [:search-selected-entry-id]))
+(defn open-result [uuid]
+  (dispatch [:search/open-result uuid]))
 
-(defn dialog-data []
-  (subscribe [:search-dialog-data]))
+(defn open-active-result [{:keys [selected-entry-id result]}]
+  (when-let [uuid (or selected-entry-id (some-> result :entry-items first :uuid))]
+    (open-result uuid)))
 
-(defn init-search-data [app-db]
-  (-> app-db (assoc-in-key-db  [:search :not-matched] false)
-      (assoc-in-key-db  [:search :result] nil)
-      (assoc-in-key-db  [:search :error-text] nil)
-      (assoc-in-key-db  [:search :term] nil)
-      (assoc-in-key-db  [:search :term-showing-in-form] nil)
-      (assoc-in-key-db  [:search :selected-entry-id] nil)
-      (assoc-in-key-db [:search :dialog-show] false)))
+(defn search-data []
+  (subscribe [:search/data]))
 
-(reg-event-fx
- :search/dialog-show
- (fn [{:keys [db]} [_event-id]]
-   (let [previous-term (get-in-key-db db [:search :term-showing-in-form])]
-     (if (nil? previous-term)
-       {:db (-> db init-search-data
-                (assoc-in-key-db [:search :dialog-show] true))}
-       {:db (assoc-in-key-db db [:search :dialog-show] true)
-        :fx [[:bg-start-term-search [(active-db-key db) previous-term]]]}))))
+(defn- eligible-request? [db db-key term request-id]
+  (and (= db-key (active-db-key db))
+       (not (get-in db [db-key :locked]))
+       (= request-id (get-in db [db-key :search :request-id]))
+       (= term (get-in db [db-key :search :term]))
+       (not (str/blank? term))))
 
-(reg-event-db
- :search-dialog-close
- (fn [db [_event-id]]
-   (-> db init-search-data)))
-
-(reg-event-db
- :term-showing-in-form
- (fn [db [_event-id]]
-   ;; Copy the term to term-showing-in-form so that we can do search again when search-dialog shown 
-   ;; after user sees the entry form data and comes back to see next match for the previously entered term
-   (assoc-in-key-db db [:search :term-showing-in-form]
-                    (get-in-key-db db [:search :term]))))
-
-;; Just hides the search dialog retaining other values
-(reg-event-db
- :search-dialog-hide
- (fn [db [_event-id]]
-   (assoc-in-key-db db [:search :dialog-show] false)))
+(defn- next-request-id [_db _db-key]
+  ;; Never reuse a request token after lock/close/reopen of the same DB path.
+  ;; A late response from an older session must not match the new request.
+  (str (random-uuid)))
 
 (reg-event-fx
- :search-term-update
- (fn [{:keys [db]} [_event-id term]]
-   {:db (assoc-in-key-db db [:search :term] term)
-    :fx [[:bg-start-term-search [(active-db-key db) term]]]}))
+ :search/term-update
+ (fn [{:keys [db]} [_ term]]
+   (let [db-key (active-db-key db)
+         allowed? (and db-key (not (get-in db [db-key :locked])))
+         request-id (next-request-id db db-key)
+         search? (and allowed? (not (str/blank? term)))]
+     (if-not allowed?
+       {}
+       {:db (assoc-in db [db-key :search]
+                      {:term term :request-id request-id
+                       :popup-open? search? :pending? search?
+                       :result nil :not-matched false
+                       :error-text nil :selected-entry-id nil})
+        :fx (when search? [[:search/schedule [db-key term request-id]]])}))))
 
-
-(defn- start-term-search [db-key term]
-  (bg/search-term db-key term
-                  (fn [api-response]
-                    (when-let [result (check-error api-response #(dispatch [:search-error-text %]))]
-                      (dispatch [:search-term-completed result])))))
-
-;; Backend API call 
 (reg-fx
- :bg-start-term-search
- (fn [[db-key term]] ;; fn in 'reg-fx' accepts single argument
-   (start-term-search db-key term)))
-
-;;
-(reg-event-db
- :search-term-clear
- (fn [db [_event-id]]
-   (-> db (assoc-in-key-db [:search :term] nil)
-       (assoc-in-key-db  [:search :error-text] nil)
-       (assoc-in-key-db [:search :selected-entry-id] nil)
-       (assoc-in-key-db  [:search :result] nil))))
-
-(reg-event-db
- :search-error-text
- (fn [db [_event-id error-text]] 
-   (-> db (assoc-in-key-db  [:search :error-text] error-text)
-       (assoc-in-key-db [:search :selected-entry-id] nil)
-       (assoc-in-key-db  [:search :result] nil))))
-
-(reg-event-db
- :search-selected-entry-id-update
- (fn [db [_event-id uuid]]
-   (assoc-in-key-db db [:search :selected-entry-id] uuid)))
+ :search/schedule
+ (fn [[db-key term request-id]]
+   (when-let [old (get @search-timers db-key)]
+     (js/clearTimeout old))
+   (let [timer (js/setTimeout
+                (fn []
+                  (swap! search-timers dissoc db-key)
+                  (dispatch [:search/run db-key term request-id]))
+                search-delay-ms)]
+     (swap! search-timers assoc db-key timer))))
 
 (reg-event-fx
- :search-term-completed
- (fn [{:keys [db]} [_event-id result]]
-   ;; result is a map {:entry-items [map of entry summary]} as defined in struct EntrySearchResult
-   (let [not-matched (empty? (:entry-items result))]
-     {:db (-> db (assoc-in-key-db  [:search :result] result)
-              (assoc-in-key-db [:search :selected-entry-id] nil)
-              (assoc-in-key-db  [:search :error-text] nil)
-              (assoc-in-key-db  [:search :not-matched] not-matched))})))
+ :search/run
+ (fn [{:keys [db]} [_ db-key term request-id]]
+   (if (eligible-request? db db-key term request-id)
+     {:fx [[:search/backend [db-key term request-id]]]}
+     {})))
+
+(reg-fx
+ :search/backend
+ (fn [[db-key term request-id]]
+   (bg/search-term
+    db-key term
+    (fn [response]
+      (when-let [result
+                 (check-error response
+                              #(dispatch [:search/failed db-key term request-id %]))]
+        (dispatch [:search/completed db-key term request-id result]))))))
+
+(reg-event-db
+ :search/completed
+ (fn [db [_ db-key term request-id result]]
+   (if (eligible-request? db db-key term request-id)
+     (-> db
+         (assoc-in [db-key :search :result] result)
+         (assoc-in [db-key :search :pending?] false)
+         (assoc-in [db-key :search :error-text] nil)
+         (assoc-in [db-key :search :selected-entry-id] nil)
+         (assoc-in [db-key :search :not-matched] (empty? (:entry-items result))))
+     db)))
+
+(reg-event-db
+ :search/failed
+ (fn [db [_ db-key term request-id error]]
+   (if (eligible-request? db db-key term request-id)
+     (-> db
+         (assoc-in [db-key :search :result] nil)
+         (assoc-in [db-key :search :pending?] false)
+         (assoc-in [db-key :search :selected-entry-id] nil)
+         (assoc-in [db-key :search :error-text] error))
+     db)))
+
+(reg-event-fx
+ :search/show-results
+ (fn [{:keys [db]} [_]]
+   (let [db-key (active-db-key db)
+         search (get-in db [db-key :search])
+         term (:term search)
+         search? (and db-key (not (get-in db [db-key :locked]))
+                      (not (str/blank? term)))
+         need-refresh? (and search? (not (:pending? search))
+                            (nil? (:result search))
+                            (nil? (:error-text search)))
+         request-id (if need-refresh? (next-request-id db db-key)
+                        (:request-id search))]
+     {:db (cond-> db
+            db-key (assoc-in [db-key :search :popup-open?] (boolean search?))
+            need-refresh? (assoc-in [db-key :search :pending?] true)
+            need-refresh? (assoc-in [db-key :search :request-id] request-id))
+      :fx (when need-refresh?
+            [[:search/schedule [db-key term request-id]]])})))
+
+(reg-event-db
+ :search/hide-results
+ (fn [db [_]]
+   (let [db-key (active-db-key db)]
+     (if db-key (assoc-in db [db-key :search :popup-open?] false) db))))
+
+(reg-event-db
+ :search/clear
+ (fn [db [_]]
+   (let [db-key (active-db-key db)]
+     (if db-key
+       (assoc-in db [db-key :search]
+                 {:term "" :request-id (next-request-id db db-key)
+                  :popup-open? false :pending? false
+                  :result nil :not-matched false :error-text nil
+                  :selected-entry-id nil})
+       db))))
+
+(reg-event-db
+ :search/navigate
+ (fn [db [_ direction]]
+   (let [db-key (active-db-key db)
+         search (get-in db [db-key :search])
+         items (get-in search [:result :entry-items])
+         selected (:selected-entry-id search)]
+     (if (and db-key (not (get-in db [db-key :locked]))
+              (:popup-open? search) (seq items))
+       (let [idx (first (keep-indexed (fn [i item]
+                                        (when (= selected (:uuid item)) i)) items))
+             next-idx (if (nil? idx)
+                        (if (pos? direction) 0 (dec (count items)))
+                        (mod (+ idx direction) (count items)))]
+         (assoc-in db [db-key :search :selected-entry-id]
+                   (:uuid (nth items next-idx))))
+       db))))
+
+(reg-event-fx
+ :search/open-result
+ (fn [{:keys [db]} [_ uuid]]
+   (let [db-key (active-db-key db)
+         search (get-in db [db-key :search])]
+     (if (and db-key (not (get-in db [db-key :locked]))
+              (:popup-open? search)
+              (some #(= uuid (:uuid %)) (get-in search [:result :entry-items])))
+       {:db (assoc-in db [db-key :search :popup-open?] false)
+        :fx [[:dispatch [:entry-list/entry-selected-in-search-result uuid]]]}
+       {}))))
 
 (reg-sub
- :search-result-entry-items
- (fn [db _query-vec]
-   (get-in-key-db db [:search :result :entry-items])))
-
-(reg-sub
- :search-selected-entry-id
- (fn [db _query-vec]
-   (get-in-key-db db [:search :selected-entry-id])))
-
-(reg-sub
- :search-dialog-data
- (fn [db _query-vec]
-   (get-in-key-db db [:search])))
+ :search/data
+ (fn [db _]
+   (get-in db [(active-db-key db) :search])))

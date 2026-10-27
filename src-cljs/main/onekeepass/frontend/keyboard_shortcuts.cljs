@@ -13,7 +13,8 @@
   (:require [clojure.string :as str]
             [onekeepass.frontend.background :as bg]
             [onekeepass.frontend.constants :as const :refer [PASSWORD URL USERNAME]]
-            [onekeepass.frontend.events.entry-form-ex :as form-events]))
+            [onekeepass.frontend.events.entry-form-ex :as form-events]
+            [onekeepass.frontend.events.search :as search-events]))
 
 (defn menu-shortcut-hint
   "Forms the shortcut hint text that is shown on the right side of the entry menu items
@@ -77,7 +78,6 @@
 
     (and (not shift?) (= k ",")) ["OneKeePass" const/APP_SETTINGS]
     (and (not shift?) (= k "q")) ["OneKeePass" const/MENU_ID_QUIT]
-    (and (not shift?) (= k "f")) ["Edit" const/MENU_ID_SEARCH]
     (and shift? (= k "n"))       ["Database" const/MENU_ID_NEW_DATABASE]
     (and (not shift?) (= k "o")) ["Database" const/MENU_ID_OPEN_DATABASE]
     (and shift? (= k "o"))       ["Database" const/MENU_ID_OPEN_REMOTE]
@@ -99,7 +99,13 @@
                    (and windows? (= k "delete")))
                (not (.-altKey e))
                (not (.-isComposing e)))
-      (let [el (.-activeElement js/document)
+      ;; Ctrl/Cmd-F always targets the permanent toolbar field, never a dialog.
+      ;; Do not steal focus from another open modal dialog.
+      (if (and primary-modifier? (= k "f") (not (.-shiftKey e))
+               (not (dialog-shown?)))
+        (do (.preventDefault e)
+            (search-events/focus-search-field))
+        (let [el (.-activeElement js/document)
             shift? (.-shiftKey e)
             action (shortcut-action k shift?)
             menu-shortcut (when (and windows?
@@ -120,7 +126,7 @@
             (.preventDefault e)))
         (when menu-shortcut
           (.preventDefault e)
-          (apply bg/activate-menu-shortcut menu-shortcut))))))
+          (apply bg/activate-menu-shortcut menu-shortcut)))))))
 
 (defonce ^:private key-down-handler (atom nil))
 

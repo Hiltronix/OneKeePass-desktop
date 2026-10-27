@@ -22,7 +22,6 @@
    [onekeepass.frontend.events.group-tree-content :as gt-events]
    [onekeepass.frontend.events.open-db-form :as od-events]
    [onekeepass.frontend.events.password-generator :as gen-events]
-   [onekeepass.frontend.events.search :as srch-event]
    [onekeepass.frontend.events.tauri-events :as tauri-events]
    [onekeepass.frontend.events.tool-bar :as tb-events]
    [onekeepass.frontend.import-file.csv :as csv]
@@ -43,7 +42,6 @@
                                                      mui-icon-lock-outlined
                                                      mui-icon-save
                                                      mui-icon-save-as
-                                                     mui-icon-search
                                                      mui-icon-settings-outlined
                                                      mui-icon-image
                                                      mui-linear-progress
@@ -383,7 +381,10 @@
 
          ;; Right-side group. Same :mx spacing as the left box so both groups
          ;; are loosened by the same amount.
-         [mui-box {:sx {"& .MuiButtonBase-root" {:mx "0.5px"}}}
+         [mui-box {:sx {:display "flex"
+                        :align-items "center"
+                        :gap 1
+                        "& .MuiButtonBase-root" {:mx "0.5px"}}}
           [mui-tooltip {:title "Manage Custom Icons" :enterDelay 700}
            [:span {:style {:display "inline-flex"}} [mui-icon-button {:edge "end"
                              :disabled locked?
@@ -401,12 +402,8 @@
 
             [mui-icon-settings-outlined]]]]
 
-          [mui-tooltip {:title "Search" :enterDelay 700}
-           [:span {:style {:display "inline-flex"}} [mui-icon-button {:edge "end"
-                             :color "inherit"
-                             :disabled locked?
-                             :on-click srch-event/search-dialog-show}
-            [mui-icon-search]]]]]]]
+          ;; Permanent search entry; its Popper results panel floats below.
+          [search/toolbar-search]]]]
 
        ;; Include all dialogs that we need to use when the toll bar is visibible
        ;; Also see start_page.cljs for other dialogs  
@@ -433,7 +430,6 @@
        [save-info-dialog save-action-data]
        [nd-form/new-database-dialog-main]
        [settings-form/settings-dialog-main]
-       [search/search-dialog-main]
        [conflict-action-confirm-dialog @(tb-events/conflict-action-confirm-dialog-data)]
        [ask-save-dialog @(tb-events/ask-save-dialog-data)]
        [ask-save-on-lock @(tb-events/on-lock-ask-save-dialog-data)]
