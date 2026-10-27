@@ -80,9 +80,32 @@ fn main() {
         std::env::set_var("GTK_MODULES", kept.join(":"));
     }
 
-    // Need to create 'context' here before building the app so that we can load language translation files
-    // for the current prefered language from the resource dir in order to prepare Menus
-    let context = tauri::generate_context!();
+    // Establish the portable temp/cache locations *before* building Tauri
+    // or creating a WebView2 process. Installed builds are unaffected.
+    #[cfg(target_os = "windows")]
+    let portable_tauri_root = match app_paths::configure_portable_temp() {
+        Ok(root) => root,
+        Err(message) => {
+            // The webview does not exist yet, so display an ordinary Win32
+            // message instead of falling back to user-profile temp folders.
+            use windows_sys::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_OK};
+            let wide = |s: &str| s.encode_utf16().chain(std::iter::once(0)).collect::<Vec<u16>>();
+            let text = wide(&message);
+            let title = wide("OneKeePass Portable");
+            unsafe { MessageBoxW(0, text.as_ptr(), title.as_ptr(), MB_ICONERROR | MB_OK); }
+            std::process::exit(1);
+        }
+    };
+
+    // Create context after portable temporary locations have been configured.
+    // The override directs Tauri/plugin-managed app paths to ./temp/tauri;
+    // WebView2 uses ./temp/webview, and Rust/Windows temp APIs ./temp/work.
+    let mut context = tauri::generate_context!();
+    #[cfg(target_os = "windows")]
+    if let Some(root) = portable_tauri_root {
+        context.config_mut().app.app_directories_override =
+            Some(tauri::utils::config::AppDirectoriesOverride::Root(root));
+    }
 
     // on_window_event - Registers a window event handler for all windows
     // Instead of using this, we register window events in App.run closure

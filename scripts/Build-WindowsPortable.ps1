@@ -106,6 +106,17 @@ if ($ToolbarSource -notmatch '\[search/toolbar-search\]' -or
     $CommonEventsSource -notmatch 'dissoc :entry-list-otp :search') {
     throw "Permanent toolbar search, keyboard focus or lock-safe results guard is missing."
 }
+# Portable temp paths must be configured before Tauri/WebView2 initialization.
+$PathSource = Get-Content -Raw (Join-Path $Root "src-tauri/src/app_paths.rs")
+$MainPortableSource = Get-Content -Raw (Join-Path $Root "src-tauri/src/main.rs")
+if ($PathSource -notmatch 'fn configure_portable_temp' -or
+    $PathSource -notmatch 'set_var\("TEMP"' -or
+    $PathSource -notmatch 'set_var\("TMP"' -or
+    $PathSource -notmatch 'set_var\("WEBVIEW2_USER_DATA_FOLDER"' -or
+    $MainPortableSource -notmatch 'AppDirectoriesOverride::Root' -or
+    $MainPortableSource -notmatch 'configure_portable_temp') {
+    throw "Portable TEMP/TMP, WebView2 and Tauri cache redirection must remain enabled."
+}
 $Version = $Configuration.version
 $BrowserArgs = $Configuration.app.windows[0].additionalBrowserArgs
 # Prevent redundant Tauri default grants from widening UI authority.

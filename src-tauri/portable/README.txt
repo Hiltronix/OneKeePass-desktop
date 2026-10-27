@@ -20,11 +20,18 @@ reports that WebView2 is missing, install it from:
 
 Where your data is kept
 -----------------------
-All application data - preferences, logs, backups and word lists - is stored
-in the 'onekeepass-data' folder next to OneKeePass.exe. It is created on the
-first run. Deleting this folder removes all traces of your OneKeePass usage
-(your password database .kdbx files are separate and stay wherever you saved
-them).
+Persistent application data - preferences, logs, backups and word lists -
+remains inside 'onekeepass-data' next to OneKeePass.exe.
+
+Portable working files and caches are redirected to the separate 'temp'
+folder next to the EXE. This is local to the OneKeePass process: it does NOT
+change the Windows system TEMP/TMP settings. Deleting 'temp' is generally
+safe only after OneKeePass and its WebView2 child processes have exited.
+It will be recreated automatically on next launch.
+
+KDBX database files are stored wherever you chose to save them. Windows,
+security software, crash reporting and third-party viewers/editors may
+still create their own files outside the application directory.
 
 Files in this folder
 --------------------
@@ -33,7 +40,11 @@ Files in this folder
                         delete it. Without it the app stores its data under
                         %USERPROFILE%\.onekeepass like the installed version
   _up_\                 Bundled application resources - do NOT delete
-  onekeepass-data\      Your application data (created on first run)
+  onekeepass-data\      Persistent application data (created on first run)
+  temp\
+    work\               Temporary attachment copies and OS/Rust temp files
+    webview\            WebView2 browser profile, cache and working data
+    tauri\              Tauri/plugin managed app cache and working data
 
 Updating to a new version
 -------------------------
@@ -52,5 +63,13 @@ Notes and limitations
 - Remote SFTP/WebDAV access and browser extension integration are disabled
   in this Hiltronix Windows edition. Older browser manifests are not removed
   automatically.
-- While viewing an entry attachment, a temporary copy is placed in the
-  Windows temp folder. It is removed when the app starts and when it quits.
+- External-viewer attachment copies are kept under temp\\work\\okp_cache.
+  They are deleted on lock/close when possible and swept on the next launch
+  after a crash. A file open in an editor may resist deletion on Windows.
+- Tauri/WebView2 profile data within temp can survive app restarts; the whole
+  temp folder is NOT automatically deleted at startup or shutdown.
+- Older OneKeePass/WebView2 versions may have left caches in AppData or Windows
+  TEMP. This update does not attempt to migrate or delete older files.
+- Running portable builds from a shared/writable directory, USB drive or
+  filesystem without user-only permissions may expose temporary plaintext
+  attachments to other users. Use a private NTFS directory where possible.

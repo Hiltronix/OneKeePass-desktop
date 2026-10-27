@@ -125,6 +125,50 @@ pub(crate) fn is_portable() -> bool {
     portable_data_home().is_some()
 }
 
+/// Configure the Windows portable process *before* constructing a Tauri
+/// WebView. Tauri and WebView2 both create caches as part of window startup,
+/// so setting environment variables in the later setup hook is too late.
+#[cfg(target_os = "windows")]
+pub(crate) fn configure_portable_temp() -> Result<Option<PathBuf>, String> {
+    let Some(portable_home) = portable_data_home() else {
+        return Ok(None); // Installed builds retain their normal Windows paths.
+    };
+    let exe_dir = portable_home.parent()
+        .ok_or_else(|| "Cannot find portable executable directory".to_string())?;
+    let root = exe_dir.join("temp");
+    let work = root.join("work");
+    let webview = root.join("webview");
+    let tauri = root.join("tauri");
+
+    for path in [&root, &work, &webview, &tauri] {
+        fs::create_dir_all(path).map_err(|e| {
+            format!("Cannot create portable temporary directory {}: {e}", path.display())
+        })?;
+    }
+
+    // Fail closed if the folder is not writable: otherwise a system fallback
+    // could scatter decrypted attachment files outside the portable directory.
+    let probe = work.join(format!(".writetest-{}", uuid::Uuid::new_v4()));
+    fs::write(&probe, b"").map_err(|e| {
+        format!("Portable temporary directory {} is not writable: {e}", work.display())
+    })?;
+    let _ = fs::remove_file(probe);
+
+    // These variables apply to this OneKeePass process and child processes,
+    // not system-wide. Windows GetTempPath and Rust env::temp_dir use them.
+    std::env::set_var("TEMP", &work);
+    std::env::set_var("TMP", &work);
+
+    // Microsoft WebView2 honors this environment override for its browser
+    // profile, GPU/cache files, Local Storage, etc.
+    std::env::set_var("WEBVIEW2_USER_DATA_FOLDER", &webview);
+
+    // Tauri app/cache/local-data paths are redirected independently using
+    // AppDirectoriesOverride before Builder::build; they use this root.
+    Ok(Some(tauri))
+}
+
+
 // In portable mode the data dir must be created next to the exe. The user may
 // have unzipped into a read-only location (e.g 'C:\Program Files'); dir creation
 // alone can appear to succeed there, so a probe file write confirms writability.
