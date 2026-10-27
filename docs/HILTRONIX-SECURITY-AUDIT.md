@@ -201,3 +201,7 @@ Network isolation and Windows OpenSSH named-pipe security have received a new so
 - **Evidence helper:** `scripts/Audit-WindowsSecurity.ps1` queries the named-pipe DACL by handle and samples process-attributed TCP endpoints without altering Windows configuration. Polling does not capture UDP or all short-lived TCP connections; a second-user negative test is still necessary.
 
 Do not close W-07 or the named-pipe security issue on the strength of source review or a green build alone.
+
+## Named-pipe restricted-DACL remediation candidate (2026-10-27-03)
+
+Current Windows source builds each `\\.\pipe\openssh-ssh-agent` instance with a protected same-account/SYSTEM/Administrators DACL, using Tokio's `create_with_security_attributes_raw` API; the SDDL is derived from the current process-token user SID and does not include Everyone or Anonymous. Existing `ssh-agent-lib` protocol handling remains unchanged. **Unverified until the Windows build and same-account/other-account runtime tests pass.** See the October 27 Windows security review for acceptance requirements.

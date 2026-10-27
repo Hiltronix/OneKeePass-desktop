@@ -102,3 +102,15 @@ Audit status: **SOURCE REVIEW COMPLETED; WINDOWS RUNTIME CHECKS OPEN.**
 An initial two-minute run on Windows 10, reported by the user, observed 7 related processes (OneKeePass.exe plus six msedgewebview2.exe descendants) and **zero sampled TCP records**. This is favorable evidence from TCP polling, not a complete absence-of-network proof (misses UDP, DNS and short connections).
 
 The same run could not retrieve the pipe ACL: `GetSecurityInfo` returned Win32 error `87` (invalid parameter). The script incorrectly passed `SE_FILE_OBJECT=1` for a named-pipe handle. The audit helper has been corrected to use `SE_KERNEL_OBJECT=6`. The initial `BroadAccessDetected: False` value is **not evidence of a restrictive DACL**; no SDDL or ACEs were actually retrieved. Recheck using the corrected helper; a five-second run is sufficient to inspect the pipe DACL.
+
+## P-01 remediation candidate — revision 2026-10-27-03
+
+After the live ACL inspection showed `SYSTEM`, `Administrators`, and the current user with full control, and `Everyone`/`Anonymous` with read access, the Windows OpenSSH transport was changed to **create every pipe instance with an explicit protected security descriptor**:
+
+```text
+D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;<current account SID>)
+```
+
+The SID is derived at runtime from the OneKeePass process token. Every instance, including replacements created after clients connect, uses the same descriptor. The listener also explicitly rejects remote pipe clients. Agent key storage, signing approval, timeout handling, Pageant interface and standard pipe name are unchanged.
+
+**Validation is pending:** a Windows/MSVC compile, the actual pipe ACL inspection (`QueryResult: 0`, no Everyone or Anonymous ACE), `ssh-add -l`, SSH authentication, and an unprivileged second-account access test. A change to the source is not proof of effective isolation. Previous 2026-10-27-02 binary still exposes the default DACL.
