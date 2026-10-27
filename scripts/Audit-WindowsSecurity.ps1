@@ -110,6 +110,59 @@ $pipeReport | ConvertTo-Json -Depth 8 | Set-Content -Encoding UTF8 (Join-Path $O
 $root=Get-CimInstance Win32_Process -Filter "Name='OneKeePass.exe'" |
     Sort-Object CreationDate -Descending | Select-Object -First 1
 if (-not $root) { throw "Start OneKeePass.exe before running the audit. Pipe report saved in $OutputDirectory" }
+
+# Inspect NTFS permissions for portable data, logs, backups and the temporary
+# decrypted-attachment cache. ACL queries are read-only. Inherited ACEs are
+# preserved in the report because inherited broad read access matters as well.
+$exePath=$root.ExecutablePath
+$aclChecks=New-Object 'System.Collections.Generic.List[object]'
+if ($exePath) {
+    $exeRoot=Split-Path -Parent $exePath
+    $portableMarker=Join-Path $exeRoot '.portable'
+    $dataRoot=if (Test-Path -LiteralPath $portableMarker -PathType Leaf) {
+        Join-Path $exeRoot 'onekeepass-data'
+    } else {
+        Join-Path $HOME '.onekeepass\\prod'
+    }
+    $targetPaths=@(
+        $dataRoot,
+        (Join-Path $dataRoot 'logs'),
+        (Join-Path $dataRoot 'logs\\onekeepass.log'),
+        (Join-Path $dataRoot 'backups'),
+        (Join-Path $env:TEMP 'okp_cache')
+    )
+    $broadSids=@("S-1-1-0","S-1-5-7","S-1-5-11","S-1-5-32-545")
+    foreach($targetPath in $targetPaths) {
+        $entry=[ordered]@{Path=$targetPath; Exists=$false; Sddl=$null; BroadAllowAceFound=$null; AceList=@(); Error=$null}
+        try {
+            if (Test-Path -LiteralPath $targetPath) {
+                $entry.Exists=$true
+                $acl=Get-Acl -LiteralPath $targetPath
+                $entry.Sddl=$acl.Sddl
+                $entry.BroadAllowAceFound=$false
+                foreach($ace in $acl.Access) {
+                    $sid=try {
+                        $ace.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value
+                    } catch { $ace.IdentityReference.Value }
+                    $entry.AceList+= [pscustomobject]@{
+                        SID=$sid
+                        AccessType=$ace.AccessControlType.ToString()
+                        Rights=$ace.FileSystemRights.ToString()
+                        Inherited=$ace.IsInherited
+                    }
+                    if ($sid -in $broadSids -and $ace.AccessControlType.ToString() -eq 'Allow') {
+                        $entry.BroadAllowAceFound=$true
+                    }
+                }
+            }
+        } catch { $entry.Error=$_.Exception.Message }
+        $aclChecks.Add([pscustomobject]$entry)
+    }
+} else {
+    $aclChecks.Add([pscustomobject]@{Path=$null;Exists=$false;Error='Unable to resolve OneKeePass executable path from Win32_Process'})
+}
+$aclChecks | ConvertTo-Json -Depth 7 | Set-Content -Encoding UTF8 (Join-Path $OutputDirectory 'file-acls.json')
+
 $tracked=@{}
 $tracked[[int]$root.ProcessId]="OneKeePass.exe"
 $observations=New-Object 'System.Collections.Generic.List[object]'
@@ -160,6 +213,8 @@ $summary=[ordered]@{
     NonLoopbackTCPRecords=$external.Count
     PipeQueryWin32Result=$pipeReport.QueryResult
     PipeBroadAllowAceFound=$pipeReport.BroadAccessDetected
+    FilesystemAclChecks=$aclChecks.Count
+    FilesystemBroadAllowAceRecords=@($aclChecks | Where-Object { $_.BroadAllowAceFound -eq $true }).Count
     NetworkConclusion="INCONCLUSIVE: TCP polling misses transient connections and UDP datagrams, and child-process coverage is best effort. A WFP/ETW packet/process trace is required to verify absence of outbound traffic."
     PipeConclusion="INCONCLUSIVE until DACL and a separate-user negative-access test are reviewed."
     PrivacyNotice="Reports contain process identifiers, local Windows SID and network endpoints. Review before sharing."
@@ -168,5 +223,6 @@ $summary | ConvertTo-Json -Depth 5 | Set-Content -Encoding UTF8 (Join-Path $Outp
 Write-Host "Reports saved to: $OutputDirectory"
 Write-Host "Distinct TCP records: $($observations.Count); non-loopback records: $($external.Count)"
 Write-Host "Named-pipe security query Win32 result: $($pipeReport.QueryResult)"
-Write-Host "Broad allow ACE detected: $($pipeReport.BroadAccessDetected)"
+Write-Host "Broad allow ACE detected on pipe: $($pipeReport.BroadAccessDetected)"
+Write-Host "Broad allow ACEs in file ACL report: $(@($aclChecks | Where-Object { $_.BroadAllowAceFound -eq $true }).Count)"
 Write-Warning "This is not a packet-level no-network proof. Review summary.json before treating the audit as passed."

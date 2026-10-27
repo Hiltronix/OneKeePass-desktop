@@ -145,3 +145,10 @@ Validation: Windows build, advisory rescan, Windows Hello rejection/success, loc
 - Windows locked files may resist deletion; those failures remain recorded for retry and the usual startup/exit sweep. The feature cannot guarantee secure deletion of underlying SSD blocks, cloud backups or editors' copies.
 - Removes redundant `shell:default`/`process:default` Tauri permissions; explicit `shell:allow-open` and `process:allow-exit` remain so local user actions keep working.
 - Rust advisory scan identified freshly disclosed `RUSTSEC-2026-0387` in `crypto-bigint` 0.5.5 and 0.7.5; patched 0.7.6 is targeted by the controlled lockfile-update workflow. The 0.5.x chain is not blindly upgraded across incompatible releases.
+
+
+## Windows runtime filesystem ACL check (audit utility update)
+
+The read-only audit utility now records `file-acls.json` alongside the pipe ACL and TCP observations. When a running OneKeePass process exposes its executable path, the helper examines the detected application data folder, active log, backups folder and `%TEMP%\\okp_cache` for ACLs granting Everyone, Anonymous Logon, Authenticated Users or Builtin Users access, including inherited ACEs.
+
+A broad ACE means *review the effective rights*; it does not establish that another user can read the sensitive files, and shared/fat/exFAT volumes may have different semantics. No permissions are changed automatically. Review paths, account SIDs and directory names before sharing reports; this audit cannot reliably prove secure deletion.
