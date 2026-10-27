@@ -51,8 +51,13 @@ jobs:
             fi
           }
 
+          # Resolve the new pinned core revision/feature selection first.
+          # Its local-image-only feature removes the optional favicon downloader
+          # while the original full feature remains available to other clients.
+          cargo update --manifest-path src-tauri/Cargo.toml --package onekeepass-core
+
           # Changes are restricted to patch versions within existing release
-          # lines. No RSA algorithm substitution, key handling, or core change.
+          # lines. No RSA algorithm substitution or SSH signing change.
           # 2026-10-23 RUSTSEC-2026-0387: the 0.7 branch has a same-series
           # patched 0.7.6. Do not force upgrade of the distinct 0.5.x family;
           # that requires dependency ancestry, feature and API review.
