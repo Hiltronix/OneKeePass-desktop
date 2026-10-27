@@ -103,3 +103,9 @@ With a disposable database, verify all of these on Windows 10:
 The Windows app startup now explicitly applies the Tauri default window icon to the `main` native window using `WebviewWindow::set_icon`, rather than relying solely on the icon embedded in `OneKeePass.exe`. This allows Windows to retrieve the window's large icon for the Alt+Tab switcher. The existing `.ico` file already contains 16, 24, 32, 48, 64, 96, 128 and 256 pixel variants; no icon resources or Cargo dependencies were replaced.
 
 **Windows acceptance:** Build the current desktop revision, run the portable EXE, and compare the icon in the Alt+Tab switcher against the taskbar and window caption icon. Repeat after closing and relaunching the application. This is a source-level change awaiting Windows runtime validation.
+
+## Windows Alt+Tab large-icon registration (2026-10-26-03)
+
+Revision 2026-10-26-02 only used Tauri `WebviewWindow::set_icon`, which on Windows routes through Tao's `set_window_icon` and sets `ICON_SMALL`. Windows Alt+Tab instead asks for `ICON_BIG`, explaining the generic switcher icon. The Windows startup now loads Tauri's already-embedded group-icon resource 32512 from `OneKeePass.exe` with the Win32 `LoadImageW` API and `LR_SHARED`, then registers it as `ICON_BIG` using `WM_SETICON` on the main native HWND. It verifies the icon using `WM_GETICON` and records success/failure in the existing application log. The taskbar/executable icon, SSH agent, Cargo dependencies and packaging are unchanged.
+
+**Windows acceptance:** After a successful Windows portable build, launch the new revision and verify the Alt+Tab icon. Inspect `onekeepass-data/logs/onekeepass.log` for `Windows Alt+Tab large icon registered`. Repeat after closing and launching again. The source-level API change requires native build and runtime validation before calling this a confirmed fix.

@@ -99,13 +99,67 @@ fn main() {
             app_state::init_app(app);
             #[cfg(target_os = "windows")]
             {
-                // Set the main HWND icon explicitly for the Alt+Tab switcher.
-                // The executable resource icon alone may not be used as ICON_BIG.
+                // Tauri's set_icon registers ICON_SMALL, not the ICON_BIG needed by Alt+Tab.
+                // The executable icon is compiled into resource group 32512 by tauri-build.
                 if let Some(window) = app.get_webview_window("main") {
                     if let Some(icon) = app.default_window_icon() {
                         window.set_icon(icon.clone())?;
                     } else {
                         log::warn!("Default Windows window icon is unavailable");
+                    }
+
+                    use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
+                    use windows_sys::Win32::UI::WindowsAndMessaging::{
+                        LoadImageW, SendMessageW, ICON_BIG, IMAGE_ICON, LR_DEFAULTSIZE, LR_SHARED,
+                        WM_GETICON, WM_SETICON,
+                    };
+
+                    let moduleHandle = unsafe { GetModuleHandleW(std::ptr::null()) };
+                    if moduleHandle == 0 {
+                        log::warn!("Could not locate the OneKeePass executable icon resource");
+                    } else {
+                        // LR_SHARED keeps the embedded icon alive for the lifetime of the app.
+                        let iconHandle = unsafe {
+                            LoadImageW(
+                                moduleHandle,
+                                32512usize as *const u16,
+                                IMAGE_ICON,
+                                0,
+                                0,
+                                LR_DEFAULTSIZE | LR_SHARED,
+                            )
+                        };
+                        if iconHandle == 0 {
+                            log::warn!(
+                                "Could not load the OneKeePass large icon: {}",
+                                std::io::Error::last_os_error()
+                            );
+                        } else {
+                            match window.hwnd() {
+                                Ok(hwnd) => {
+                                    let nativeHwnd = hwnd.0 as isize;
+                                    unsafe {
+                                        SendMessageW(
+                                            nativeHwnd,
+                                            WM_SETICON,
+                                            ICON_BIG as usize,
+                                            iconHandle,
+                                        );
+                                    }
+                                    let registeredIcon = unsafe {
+                                        SendMessageW(nativeHwnd, WM_GETICON, ICON_BIG as usize, 0)
+                                    };
+                                    if registeredIcon == iconHandle {
+                                        log::info!("Windows Alt+Tab large icon registered");
+                                    } else {
+                                        log::warn!("Windows Alt+Tab large icon registration failed");
+                                    }
+                                }
+                                Err(error) => {
+                                    log::warn!("Could not get the OneKeePass native window: {error}");
+                                }
+                            }
+                        }
                     }
                 } else {
                     log::warn!("Main window is unavailable while setting its icon");
