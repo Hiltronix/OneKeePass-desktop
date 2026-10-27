@@ -1,75 +1,100 @@
 // Windows OpenSSH named-pipe transport for the SSH agent.
 //
-// Binds the well-known `\\.\pipe\openssh-ssh-agent` pipe that stock Win32-OpenSSH
-// and Git-for-Windows clients connect to with no extra configuration, and serves
-// them through the same `AgentSession` / `SshAgentStore` the unix socket uses.
-// `ssh-agent-lib` already provides a `NamedPipeListener` and the same `listen`
-// accept loop, so this transport is a thin mirror of `server.rs`.
+// Tokio's Windows named-pipe implementation needs an active I/O reactor.
+// Do not schedule binding on the shared Tauri runtime and synchronously wait
+// for its acknowledgement: when start() is itself called on that runtime, the
+// wait can starve the task until it times out (observed in Windows logs).
+//
+// A dedicated OS thread owns a current-thread Tokio reactor for the lifetime
+// of the named-pipe listener. The caller receives startup success only after
+// the listener has actually bound; shutdown signals that thread and stop()
+// joins it before a new agent can bind the same pipe.
 
 use std::sync::{Arc, RwLock};
+use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use tokio::sync::Notify;
-
 use ssh_agent_lib::agent::NamedPipeListener;
 
 use super::session::AgentSession;
 use super::store::SshAgentStore;
 
-// The pipe stock OpenSSH clients look for. Matching it means `ssh`, `ssh-add`,
-// and Git-for-Windows find the agent without any IdentityAgent / SSH_AUTH_SOCK
-// configuration.
+// The standard name used by Windows OpenSSH and Git-for-Windows clients.
 pub(crate) const PIPE_PATH: &str = r"\\.\pipe\openssh-ssh-agent";
 
-// Binds the named pipe and spawns the accept loop on the Tauri async runtime.
-// The loop runs until `shutdown` is signalled (agent stop / app quit).
-//
-// `NamedPipeListener::bind` uses `first_pipe_instance(true)`, so the bind fails
-// if another process already owns the pipe — typically the built-in Windows
-// `ssh-agent` service. That error is surfaced through the returned `Result` so
-// the settings UI can explain it rather than failing silently.
+// Return the owning worker handle on success. It must be joined after shutdown
+// so that immediate stop/restart cannot race with the previous bound listener.
 pub(crate) fn bind_and_spawn(
     store: Arc<RwLock<SshAgentStore>>,
     shutdown: Arc<Notify>,
-) -> Result<(), String> {
-    let (bind_tx, bind_rx) = std::sync::mpsc::channel::<Result<(), String>>();
+) -> Result<JoinHandle<()>, String> {
+    let (bind_tx, bind_rx) = std::sync::mpsc::sync_channel::<Result<(), String>>(1);
 
-    tauri::async_runtime::spawn(async move {
-        // Tokio's Windows named-pipe creation requires a running reactor, so the
-        // bind must happen inside this async task rather than in the synchronous
-        // caller during app startup.
-        let listener = match NamedPipeListener::bind(PIPE_PATH) {
-            Ok(listener) => {
-                let _ = bind_tx.send(Ok(()));
-                listener
-            }
-            Err(e) => {
-                let msg = format!(
-                    "failed to bind {PIPE_PATH}: {e}. The Windows OpenSSH 'ssh-agent' \
-                     service may already own this pipe — stop and disable it in \
-                     services.msc, then re-enable the OneKeePass agent"
-                );
-                let _ = bind_tx.send(Err(msg));
-                return;
-            }
-        };
-
-        let session = AgentSession::new(store);
-        log::info!("SSH agent listening on {}", PIPE_PATH);
-
-        tokio::select! {
-            res = ssh_agent_lib::agent::listen(listener, session) => {
-                if let Err(e) = res {
-                    log::error!("SSH agent named-pipe listener ended with error: {:?}", e);
+    let worker = thread::Builder::new()
+        .name("onekeepass-ssh-pipe".to_string())
+        .spawn(move || {
+            let runtime = match tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+            {
+                Ok(rt) => rt,
+                Err(e) => {
+                    let _ = bind_tx.send(Err(format!(
+                        "failed to start OpenSSH named-pipe I/O runtime: {e}"
+                    )));
+                    return;
                 }
-            }
-            _ = shutdown.notified() => {
-                log::info!("SSH agent named-pipe listener received shutdown signal");
-            }
-        }
-    });
+            };
 
-    bind_rx
-        .recv_timeout(Duration::from_secs(5))
-        .map_err(|e| format!("timed out waiting for {PIPE_PATH} bind result: {e}"))?
+            runtime.block_on(async move {
+                let listener = match NamedPipeListener::bind(PIPE_PATH) {
+                    Ok(listener) => listener,
+                    Err(e) => {
+                        let _ = bind_tx.send(Err(format!(
+                            "failed to bind {PIPE_PATH}: {e}. Another SSH agent                              may already own this pipe"
+                        )));
+                        return;
+                    }
+                };
+
+                // If startup has timed out and the receiver has been dropped,
+                // abandon this listener immediately: never leave an orphan pipe
+                // running after the caller reported failure.
+                if bind_tx.send(Ok(())).is_err() {
+                    return;
+                }
+
+                log::info!("SSH agent listening on {}", PIPE_PATH);
+                let session = AgentSession::new(store);
+                tokio::select! {
+                    result = ssh_agent_lib::agent::listen(listener, session) => {
+                        if let Err(e) = result {
+                            log::error!(
+                                "SSH agent named-pipe listener ended with error: {:?}", e
+                            );
+                        }
+                    }
+                    _ = shutdown.notified() => {
+                        log::info!("SSH agent named-pipe listener received shutdown signal");
+                    }
+                }
+            });
+        })
+        .map_err(|e| format!("failed to create OpenSSH named-pipe worker: {e}"))?;
+
+    // Waiting here is safe even if the caller runs on a Tauri worker:
+    // binding is on a *separate OS thread with its own Tokio runtime*.
+    let started = bind_rx
+        .recv_timeout(Duration::from_secs(10))
+        .map_err(|e| format!("timed out waiting for {PIPE_PATH} bind result: {e}"))?;
+
+    match started {
+        Ok(()) => Ok(worker),
+        Err(e) => {
+            // This worker has already reported an error and is exiting.
+            let _ = worker.join();
+            Err(e)
+        }
+    }
 }

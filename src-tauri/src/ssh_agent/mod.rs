@@ -79,6 +79,9 @@ struct AgentRuntime {
     // the Pageant transport is running.
     #[cfg(windows)]
     pageant: Option<pageant::PageantHandle>,
+    // Join on shutdown so an old listener cannot survive into a restart.
+    #[cfg(windows)]
+    pipe_worker: Option<std::thread::JoinHandle<()>>,
 }
 
 static RUNTIME: OnceLock<Mutex<AgentRuntime>> = OnceLock::new();
@@ -113,6 +116,8 @@ fn runtime() -> &'static Mutex<AgentRuntime> {
             prune_stop: None,
             #[cfg(windows)]
             pageant: None,
+            #[cfg(windows)]
+            pipe_worker: None,
         })
     })
 }
@@ -226,7 +231,8 @@ pub(crate) fn start() -> AgentStatus {
         // Primary transport: the OpenSSH named pipe. If it binds we are "running".
         let shutdown = Arc::new(Notify::new());
         match pipe::bind_and_spawn(rt.store.clone(), shutdown.clone()) {
-            Ok(()) => {
+            Ok(worker) => {
+                rt.pipe_worker = Some(worker);
                 rt.shutdown = Some(shutdown);
                 rt.socket_path = Some(pipe::PIPE_PATH.to_string());
                 rt.mode = Some(SshAgentMode::Agent);
@@ -307,7 +313,9 @@ pub(crate) fn stop() -> AgentStatus {
     }
 
     if let Some(shutdown) = rt.shutdown.take() {
-        shutdown.notify_waiters();
+        // One listener owns the notification. notify_one also stores a permit
+        // if shutdown races with the listener starting its select! wait.
+        shutdown.notify_one();
     }
     // Signal the Agent-Lifetime sweep task to exit.
     if let Some(stop_flag) = rt.prune_stop.take() {
@@ -328,6 +336,12 @@ pub(crate) fn stop() -> AgentStatus {
     #[cfg(windows)]
     if let Some(handle) = rt.pageant.take() {
         handle.stop();
+    }
+    #[cfg(windows)]
+    if let Some(worker) = rt.pipe_worker.take() {
+        if worker.join().is_err() {
+            log::error!("SSH agent named-pipe worker terminated unexpectedly");
+        }
     }
 
     rt.store.write().unwrap().clear();

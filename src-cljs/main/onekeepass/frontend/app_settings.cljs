@@ -386,8 +386,13 @@
             [mui-menu-item {:value const/SSH_AGENT_CLIENT_TRANSPORT_PAGEANT}
              (t/lstr-l "sshAgentClientTransportPageant")]])
 
-         (when (and enabled? active-selected-config? error)
+         ;; Show startup errors even if the agent never became 'running'.
+         ;; Previously the failed-start state suppressed the error *and* path.
+         (when (and enabled? error)
            [mui-alert {:severity "error" :sx {:mt 1}} error])
+         (when (and enabled? (false? running) (nil? error))
+           [mui-alert {:severity "warning" :sx {:mt 1}}
+            "SSH Agent is not running"])
 
          (when (and enabled? active-selected-config?)
            [mui-stack {:spacing 1 :sx {:mt 2}}

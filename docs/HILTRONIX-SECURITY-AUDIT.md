@@ -1,6 +1,6 @@
 # Hiltronix OneKeePass security audit (Windows desktop)
 
-Audit date: 2026-10-23. Source revision: `2026-10-23-14` (desktop v0.27.0).
+Audit date: 2026-10-23. Source revision: `2026-10-26-01` (desktop v0.27.0).
 Scope: Hiltronix Windows x64 portable desktop edition plus the pinned
 Hiltronix `onekeepass-core` source at `a4f0f2b74d893f3a4b8b5052c960e2497177fd2f` (quick-xml 0.41 branch-tested commit, now reachable from core main).
 Android is **not** covered by this Windows-only audit.
@@ -170,3 +170,23 @@ The initial Welcome/start screen displays a centered `Revision: <value>` directl
 - **Pageant malformed-input hardening:** `WM_COPYDATA` mapping names now require an in-bounds terminal NUL, no embedded NUL, and a maximum 256-byte length before the Win32 NUL-terminated API is called. `MapViewOfFile` now requests the full 8192-byte Pageant mapping, rejecting undersized mappings rather than dereferencing a truncated region. The shared handler retains same-user mapping-owner SID validation, bounded frame handling, explicit confirmation, and timeouts.
 - **Outstanding:** default security ACL for OpenSSH named pipe is controlled by `ssh-agent-lib`. Microsoft documents default named-pipe ACLs that include some access for Everyone and Anonymous, so explicit DACL inspection or a custom same-user security descriptor is required before calling the transport strictly same-user. Test the raw Windows pipe with a disposable key using a separate Windows user account before tightening ACLs. Remote pipe clients should also be excluded. User-defined passphrases / protected fields are still present transiently as ordinary buffers in parts of upstream libraries.
 - **Verification:** build Windows portable ZIP from this source, inspect MSVC compile errors and package hash, test local KDBX open/edit/save, credential-manager re-unlock, SSH OpenSSH named-pipe and Pageant signing/confirmation, invalid lifetime rejection, and bounded Pageant frames with disposable keys. Revision on Welcome and About must both be `2026-10-23-14`.
+
+
+
+## Windows OpenSSH agent startup deadlock (2026-10-26; revision 2026-10-26-01)
+
+Windows production logs on October 23 and October 26 captured a consistent sequence:
+
+```text
+[ERROR] SSH agent failed to start: timed out waiting for
+        \\.\pipe\openssh-ssh-agent bind result: timed out waiting on channel
+[INFO] SSH agent listening on \\.\pipe\openssh-ssh-agent
+```
+
+The old code spawned Tokio named-pipe binding on Tauri's shared async runtime, then used synchronous `recv_timeout(5s)` to await completion. When invoked on a Tauri runtime worker, that block could starve the binding task. The caller marked startup failed, cleared the key store and discarded its shutdown handle; the orphan task later acquired the pipe, so `ssh-add -l` could connect but report `The agent has no identities`.
+
+**Remediation:** Windows OpenSSH binding now runs on its own named OS thread with a dedicated current-thread Tokio runtime. Startup confirmation is sent only after successful binding. If the startup caller times out and drops the receiver, the worker drops the late-bound listener without servicing requests. The app stores the worker handle, issues a non-losing `Notify::notify_one` on stop, and joins the thread before allowing an immediate restart. Failed starts now show their error, and an enabled-but-not-running agent shows a warning in the SSH Agent settings UI, instead of suppressing diagnostics.
+
+**Build acceptance:** MSVC compile and portable ZIP packaging must pass. On Windows, launch revised OneKeePass, open the existing disposable SSH Key entry with `Add to SSH Agent` enabled, and verify the settings display the pipe and nonzero key count; then `ssh-add -l` should report the expected public-key fingerprint. Test `ssh-add -T <existing-public-key-file>` to verify signing and confirmation; lock database and ensure the key disappears, then unlock and verify it returns. Check stop/start without delays, no bind timeout in log, and confirm separate OpenSSH service remains stopped. The source change is not a claim that runtime validation has passed.
+
+**Windows named-pipe permissions:** custom DACL enforcement remains a separate audit item; this fix does not change the security descriptor and does not prove isolation from other local accounts.
