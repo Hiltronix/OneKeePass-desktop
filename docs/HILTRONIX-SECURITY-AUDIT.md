@@ -314,3 +314,12 @@ Both normal portable startup and the helper acquire the same per-directory named
 The removal refuses a reparse-point/symlink/junction `temp` root and uses Rust's symlink-safe `remove_dir_all` for nested directory entries, protecting against a basic directory-redirection attack. An external editor that continues holding an attachment may still prevent deletion, and a locked/readonly file can survive the retry window. This is best-effort deletion, not cryptographic sanitization of disk blocks. Third-party viewer files outside `temp` and Windows/OS records are not affected.
 
 **Windows runtime checks:** open/close normally, verify `temp` remains and its contents vanish shortly after OneKeePass and WebView2 fully exit; verify `onekeepass-data` and KDBX persist. Repeat with attachments open in an external program, and after forced kill followed by normal start. Verify restarting quickly cannot result in files disappearing from an active instance. Check the portable build and the Rust unit test for preservation of the root. Confirm that the helper does not briefly show the OneKeePass UI.
+
+
+## Entry editing Ctrl-S shortcut (2026-10-27-15)
+
+In the existing-entry edit screen, Ctrl-S on Windows (Cmd-S on macOS) now invokes the same `[:ok-entry-edit-ex]` re-frame event as the **Apply** button, including existing validation, database update, and UI refresh. It acts only when an unlocked existing entry is shown in edit mode; if the entry is unchanged, the shortcut is consumed without updating. It never silently applies behind an open MUI dialog, and does not intercept Ctrl-Shift-S. Normal Ctrl-S database saving remains unchanged outside edit mode.
+
+Both the webview keydown shortcut path and native `MENU_ID_SAVE_DATABASE` menu event are guarded, because Tauri's native `CmdOrControl+S` accelerator may be handled independently of a DOM keydown. This shortcut does not bypass the existing manual database-save behavior: **Apply updates the in-memory KDBX entry**, and saving the KDBX to disk remains governed by the existing Save Database / auto-save workflow and preference.
+
+Windows runtime acceptance: edit an existing entry, change a field, Ctrl-S; confirm identical behavior to Apply and an entry-updated notification. Test invalid fields, no-change editor, nested dialogs, Ctrl-Shift-S, and Ctrl-S in read-only entry view versus the normal Save Database command. No changes to existing new-entry creation flows.

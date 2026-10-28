@@ -264,6 +264,30 @@
   [_e]
   (dispatch [:ok-entry-edit-ex]))
 
+(defn editing-existing-entry?
+  "True only when the active, unlocked database is showing an existing entry
+   with its Apply/Cancel editor enabled. This is intentionally false for new
+   entries, read mode, and locked databases."
+  []
+  (let [db @rf-db/app-db
+        db-key (active-db-key db)]
+    (boolean (and db-key
+                  (not (get-in db [db-key :locked]))
+                  (= :selected (get-in-key-db db [entry-form-key :showing]))
+                  (true? (get-in-key-db db [entry-form-key :edit]))))))
+
+(defn apply-edit-shortcut []
+  "Invoke the *same* validation/update path as the Apply button, but only
+   when its enabled state would permit applying a modified existing entry.
+   Return true when edit mode owns Ctrl-S (even with no changes)."
+  (when (editing-existing-entry?)
+    (let [db @rf-db/app-db
+          undo-data (get-in-key-db db [entry-form-key :undo-data])
+          data (get-form-data db)]
+      (when (and (seq undo-data) (not= undo-data data))
+        (dispatch [:ok-entry-edit-ex])))
+    true))
+
 (defn entry-update-cancel-on-click
   "Called to undo any updates done on the form and cancel button is clicked"
   [_e]

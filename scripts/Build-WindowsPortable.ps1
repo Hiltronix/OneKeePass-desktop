@@ -86,6 +86,17 @@ if ($FileUtilSource -notmatch 'fn read_bounded_file' -or
     $CommandReadSource -notmatch '(?s)fn read_text_file.*?read_bounded_file') {
     throw "Local SSH-key and custom-icon imports must use the bounded reader."
 }
+# Ctrl-S on an existing entry must invoke Apply, not Save Database.
+$EntryFormEventsSource = Get-Content -Raw (Join-Path $Root "src-cljs/main/onekeepass/frontend/events/entry_form_ex.cljs")
+$KeysSource = Get-Content -Raw (Join-Path $Root "src-cljs/main/onekeepass/frontend/keyboard_shortcuts.cljs")
+$MenuEventsSource = Get-Content -Raw (Join-Path $Root "src-cljs/main/onekeepass/frontend/events/tauri_events.cljs")
+if ($EntryFormEventsSource -notmatch 'defn apply-edit-shortcut' -or
+    $EntryFormEventsSource -notmatch 'editing-existing-entry\?' -or
+    $EntryFormEventsSource -notmatch '\[:ok-entry-edit-ex\]' -or
+    $KeysSource -notmatch 'form-events/apply-edit-shortcut' -or
+    $MenuEventsSource -notmatch 'form-events/apply-edit-shortcut') {
+    throw "Ctrl-S Apply shortcut and native Save Database routing must remain present."
+}
 $SearchSource = Get-Content -Raw (Join-Path $Root "src-cljs/main/onekeepass/frontend/search.cljs")
 if ($SearchSource -notmatch ':autoComplete\s+"off"') {
     throw "Search field does not explicitly disable HTML autocomplete."

@@ -6,6 +6,7 @@
      Ctrl/Cmd+Shift+U - copy url
      Ctrl/Cmd+U       - open url
      Ctrl/Cmd+T       - copy totp token
+     Ctrl/Cmd+S       - Apply edited entry (Save Database otherwise)
    The shortcuts act only when the key press is not meant for any regular text
    editing or text copying. This way the default Copy/Paste handling of the
    system Edit menu, context menus and text fields are never affected
@@ -99,12 +100,23 @@
                    (and windows? (= k "delete")))
                (not (.-altKey e))
                (not (.-isComposing e)))
-      ;; Ctrl/Cmd-F always targets the permanent toolbar field, never a dialog.
-      ;; Do not steal focus from another open modal dialog.
-      (if (and primary-modifier? (= k "f") (not (.-shiftKey e))
-               (not (dialog-shown?)))
+      ;; Apply edits on Ctrl/Cmd-S only inside the existing-entry editor.
+      ;; Outside it, leave Ctrl/Cmd-S as the standard database-save shortcut.
+      ;; A modal may be editing sub-fields, so do not apply behind it.
+      (cond
+        (and primary-modifier? (= k "s") (not (.-shiftKey e))
+             (not (dialog-shown?))
+             (form-events/editing-existing-entry?))
+        (do (.preventDefault e)
+            (form-events/apply-edit-shortcut))
+
+        ;; Ctrl/Cmd-F focuses the permanent toolbar search, never a dialog.
+        (and primary-modifier? (= k "f") (not (.-shiftKey e))
+             (not (dialog-shown?)))
         (do (.preventDefault e)
             (search-events/focus-search-field))
+
+        :else
         (let [el (.-activeElement js/document)
             shift? (.-shiftKey e)
             action (shortcut-action k shift?)

@@ -102,7 +102,13 @@
       (dispatch [:remote-storage/dialog-show :open])
 
       (= menu-id const/MENU_ID_SAVE_DATABASE)
-      (dispatch [:save-current-db false])
+      ;; Native CmdOrControl+S may arrive instead of the webview key handler.
+      ;; Use the same Apply action in edit mode; don't accidentally save the
+      ;; database while the current entry still has unapplied changes.
+      (if (form-events/editing-existing-entry?)
+        (when-not (.querySelector js/document ".MuiDialog-root")
+          (form-events/apply-edit-shortcut))
+        (dispatch [:save-current-db false]))
 
       (= menu-id const/MENU_ID_SAVE_DATABASE_AS)
       (dispatch [:common/save-db-file-as false])
