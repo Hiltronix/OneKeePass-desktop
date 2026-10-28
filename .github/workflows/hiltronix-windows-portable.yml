@@ -4,7 +4,7 @@ name: Hiltronix Windows x64 portable ZIP
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, 'security/crypto-bigint-0.7.10']
     paths:
       - '.github/workflows/hiltronix-windows-portable.yml'
       - 'scripts/Build-WindowsPortable.ps1'
