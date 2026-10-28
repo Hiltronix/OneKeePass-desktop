@@ -27,7 +27,13 @@ Portable working files and caches are redirected to the separate 'temp'
 folder next to the EXE. This is local to the OneKeePass process: it does NOT
 change the Windows system TEMP/TMP settings. Deleting 'temp' is generally
 safe only after OneKeePass and its WebView2 child processes have exited.
-It will be recreated automatically on next launch.
+The folder itself is retained, but the contents are automatically removed
+after a normal OneKeePass exit. A short-lived invocation of OneKeePass.exe
+waits for the main process to end, then retries deletion while WebView2
+releases file handles. No other executable, PowerShell, or system task is
+installed. Files kept open by external programs may survive deletion attempts.
+After a crash or forced termination, stale contents are also cleaned at the
+next launch.
 
 KDBX database files are stored wherever you chose to save them. Windows,
 security software, crash reporting and third-party viewers/editors may
@@ -66,8 +72,12 @@ Notes and limitations
 - External-viewer attachment copies are kept under temp\\work\\okp_cache.
   They are deleted on lock/close when possible and swept on the next launch
   after a crash. A file open in an editor may resist deletion on Windows.
-- Tauri/WebView2 profile data within temp can survive app restarts; the whole
-  temp folder is NOT automatically deleted at startup or shutdown.
+- In normal shutdown, the app cleans all children of temp while preserving
+  the temp folder itself. It retries for up to 30 seconds when WebView2 or
+  another program briefly holds files open. The app does not force-close
+  external programs or claim secure SSD erasure.
+- Cleanup is serialized with application startup. Do not run multiple
+  copies from the same portable directory simultaneously.
 - Older OneKeePass/WebView2 versions may have left caches in AppData or Windows
   TEMP. This update does not attempt to migrate or delete older files.
 - Running portable builds from a shared/writable directory, USB drive or

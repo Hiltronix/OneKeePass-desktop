@@ -21,6 +21,8 @@ mod key_secure;
 mod mas;
 mod menu;
 mod pass_phrase;
+#[cfg(target_os = "windows")]
+mod portable_temp;
 mod power_monitor;
 mod remote_storage;
 mod sandbox;
@@ -59,6 +61,14 @@ impl WindowEventPayload {
 }
 
 fn main() {
+    // The cleanup helper is an invocation of this EXE, not a separately
+    // installed tool. Handle it before any Tauri/WebView2 initialization.
+    #[cfg(target_os = "windows")]
+    if portable_temp::is_cleanup_invocation() {
+        portable_temp::run_cleanup_helper();
+        return;
+    }
+
     // WebKitGTK's DMA-BUF renderer fails on some Linux graphics stacks (NVIDIA
     // proprietary drivers, VMs with limited 3D acceleration), leaving the webview
     // blank while the rest of the app works. Must be set before the webview is
@@ -83,7 +93,8 @@ fn main() {
     // Establish the portable temp/cache locations *before* building Tauri
     // or creating a WebView2 process. Installed builds are unaffected.
     #[cfg(target_os = "windows")]
-    let portable_tauri_root = match app_paths::configure_portable_temp() {
+    let portable_tauri_root = match portable_temp::prepare_app_start()
+        .and_then(|_| app_paths::configure_portable_temp()) {
         Ok(root) => root,
         Err(message) => {
             // The webview does not exist yet, so display an ordinary Win32
@@ -369,6 +380,14 @@ fn main() {
         #[cfg(target_os = "windows")]
         tauri::RunEvent::ExitRequested { .. } => {
             window_geometry::save(app_handle);
+        }
+
+        #[cfg(target_os = "windows")]
+        tauri::RunEvent::Exit => {
+            // WebView2 can hold cache files after this event. Start a fresh
+            // self-cleanup process, which waits for our process-lifetime
+            // mutex to become abandoned before touching ./temp children.
+            portable_temp::launch_cleanup_after_exit();
         }
 
         tauri::RunEvent::WindowEvent { label, event, .. } => {

@@ -106,6 +106,19 @@ if ($ToolbarSource -notmatch '\[search/toolbar-search\]' -or
     $CommonEventsSource -notmatch 'dissoc :entry-list-otp :search') {
     throw "Permanent toolbar search, keyboard focus or lock-safe results guard is missing."
 }
+# The Windows EXE must clean portable WebView2/working files after shutdown.
+$TempCleanupSource = Get-Content -Raw (Join-Path $Root "src-tauri/src/portable_temp.rs")
+$MainLifecycleSource = Get-Content -Raw (Join-Path $Root "src-tauri/src/main.rs")
+if ($TempCleanupSource -notmatch 'fn run_cleanup_helper' -or
+    $TempCleanupSource -notmatch 'fn empty_dir_contents' -or
+    $TempCleanupSource -notmatch 'fn launch_cleanup_after_exit' -or
+    $TempCleanupSource -notmatch 'fn prepare_app_start' -or
+    $MainLifecycleSource -notmatch 'portable_temp::is_cleanup_invocation' -or
+    $MainLifecycleSource -notmatch 'portable_temp::prepare_app_start' -or
+    $MainLifecycleSource -notmatch 'portable_temp::launch_cleanup_after_exit' -or
+    $MainLifecycleSource -notmatch 'tauri::RunEvent::Exit =>') {
+    throw "Portable post-exit temp cleanup, startup coordination or root-preservation guard is missing."
+}
 # Portable temp paths must be configured before Tauri/WebView2 initialization.
 $PathSource = Get-Content -Raw (Join-Path $Root "src-tauri/src/app_paths.rs")
 $MainPortableSource = Get-Content -Raw (Join-Path $Root "src-tauri/src/main.rs")
