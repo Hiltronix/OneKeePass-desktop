@@ -499,6 +499,10 @@ mod tests {
         ];
 
         for (key_type, bits, passphrase) in cases {
+            // P-521 uses a variable-length positive mpint. Repeated random
+            // generations cover leading-zero / shortened-scalar encodings.
+            let repetitions = if bits == Some("521") { 16 } else { 1 };
+            for _ in 0..repetitions {
             let stem = std::env::temp_dir().join(format!(
                 "onekeepass-ssh-test-{}",
                 uuid::Uuid::new_v4()
@@ -562,6 +566,7 @@ mod tests {
             if key_type == "rsa" {
                 verify_signature(&id.sign(message, SSH_AGENT_RSA_SHA2_512)
                     .expect("RSA SHA2-512 agent signing must succeed"));
+            }
             }
         }
     }
