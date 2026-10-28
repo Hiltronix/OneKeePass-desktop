@@ -1815,7 +1815,42 @@
   (subscribe [:group-tree-content/selected-group-in-recycle-bin]))
 
 (defn entry-delete-start [entry-id]
-  (dispatch [:entry-delete-start entry-id]))
+  (dispatch [:entry-delete-confirm-show entry-id]))
+
+(defn entry-delete-confirm-close []
+  (dispatch [:entry-delete-confirm-close]))
+
+(defn entry-delete-confirm-ok []
+  (dispatch [:entry-delete-confirm-ok]))
+
+(defn entry-delete-confirm-data []
+  (subscribe [:entry-delete-confirm]))
+
+(reg-event-db
+ :entry-delete-confirm-show
+ (fn [db [_event-id entry-id]]
+   (let [selected-items (get-in-key-db db [:entry-list :selected-entry-items])
+         selected-item (some #(when (= entry-id (:uuid %)) %) selected-items)
+         form-data (get-in-key-db db [entry-form-key :data])
+         title (or (:title selected-item)
+                   (when (= entry-id (:uuid form-data)) (:title form-data))
+                   "")]
+     (assoc-in-key-db db [:entry-delete-confirm]
+                      {:dialog-show true :entry-id entry-id :entry-title title}))))
+
+(reg-event-db
+ :entry-delete-confirm-close
+ (fn [db [_event-id]]
+   (assoc-in-key-db db [:entry-delete-confirm] {:dialog-show false})))
+
+(reg-event-fx
+ :entry-delete-confirm-ok
+ (fn [{:keys [db]} [_event-id]]
+   (let [entry-id (get-in-key-db db [:entry-delete-confirm :entry-id])]
+     (if entry-id
+       {:db (assoc-in-key-db db [:entry-delete-confirm] {:dialog-show false})
+        :fx [[:dispatch [:entry-delete-start entry-id]]]}
+       {}))))
 
 (defn entry-delete-info-dialog-close []
   (dispatch [:entry-delete-dialog-hide]))
