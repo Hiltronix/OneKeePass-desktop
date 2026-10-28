@@ -48,12 +48,15 @@ jobs:
       - name: Compile desktop and shared-core code
         shell: pwsh
         run: |
+          # Use the existing offline Windows Tauri config, which disables the unused proxy sidecar.
+          $env:TAURI_CONFIG = Get-Content src-tauri/tauri.windows-offline.conf.json -Raw
           cargo check --manifest-path src-tauri/Cargo.toml --locked
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Test passkey cryptography
         shell: pwsh
         run: |
+          $env:TAURI_CONFIG = Get-Content src-tauri/tauri.windows-offline.conf.json -Raw
           cargo test --manifest-path src-tauri/Cargo.toml --locked -p onekeepass-core --lib passkey_crypto
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
