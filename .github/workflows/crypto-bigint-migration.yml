@@ -53,11 +53,18 @@ jobs:
           cargo check --manifest-path src-tauri/Cargo.toml --locked
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Check out pinned core for isolated unit tests
+        uses: actions/checkout@v4
+        with:
+          repository: Hiltronix/OneKeePass-onekeepass-core
+          ref: c8da1b1d90c5e6aa2db1f33dad794e545dd664d7
+          path: core-security-tests
+          persist-credentials: false
+
       - name: Test passkey cryptography
         shell: pwsh
         run: |
-          $env:TAURI_CONFIG = Get-Content src-tauri/tauri.windows-offline.conf.json -Raw
-          cargo test --manifest-path src-tauri/Cargo.toml --locked -p onekeepass-core --lib passkey_crypto
+          cargo test --manifest-path core-security-tests/Cargo.toml --lib passkey_crypto
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Preserve validated lockfile on security branch
