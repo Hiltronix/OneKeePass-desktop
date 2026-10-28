@@ -84,20 +84,15 @@ impl StoredIdentity {
         // Keep the stable SSH Agent wire types while using the modern
         // cryptographic implementation for ECDSA P-256/P-384/P-521.
         let modern_ecdsa_key = if matches!(decoded.key.algorithm(), Algorithm::Ecdsa { .. }) {
-            let pem = normalize_private_key_pem(
-                &src.private_key_pem,
-                src.passphrase.as_deref().filter(|p| !p.is_empty()),
-            )?;
-            let parsed = ssh_key_ppk::PrivateKey::from_openssh(pem.trim())
+            // The legacy parser has already normalized PPK/OpenSSH input,
+            // validated the public key, and decrypted any passphrase.
+            // Re-encode that same key in memory rather than using decrypt
+            // APIs not provided by the modern SSH signing implementation.
+            let plain_pem = decoded.key
+                .to_openssh(ssh_key::LineEnding::LF)
+                .map_err(|e| format!("ECDSA private key serialization failed: {e}"))?;
+            let modern = ssh_key_ppk::PrivateKey::from_openssh(plain_pem.as_str())
                 .map_err(|e| format!("Modern ECDSA private key parse failed: {e}"))?;
-            let modern = if parsed.is_encrypted() {
-                let pass = src.passphrase.as_deref().filter(|p| !p.is_empty())
-                    .ok_or_else(|| "ECDSA key is encrypted but no passphrase is set".to_string())?;
-                parsed.decrypt(pass)
-                    .map_err(|e| format!("Modern ECDSA decrypt failed: {e}"))?
-            } else {
-                parsed
-            };
             Some(modern)
         } else {
             None
