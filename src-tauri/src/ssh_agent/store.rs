@@ -490,21 +490,22 @@ mod tests {
 
         let message = b"OneKeePass isolated SSH agent cryptography test";
         let cases = [
-            ("ed25519", None),
-            ("ecdsa", Some("256")),
-            ("ecdsa", Some("384")),
-            ("ecdsa", Some("521")),
-            ("rsa", Some("2048")),
+            ("ed25519", None, None),
+            ("ecdsa", Some("256"), None),
+            ("ecdsa", Some("256"), Some("temporary-test-passphrase")),
+            ("ecdsa", Some("384"), None),
+            ("ecdsa", Some("521"), None),
+            ("rsa", Some("2048"), None),
         ];
 
-        for (key_type, bits) in cases {
+        for (key_type, bits, passphrase) in cases {
             let stem = std::env::temp_dir().join(format!(
                 "onekeepass-ssh-test-{}",
                 uuid::Uuid::new_v4()
             ));
             let filename = stem.to_string_lossy().into_owned();
             let mut cmd = Command::new("ssh-keygen");
-            cmd.args(["-q", "-t", key_type, "-N", "", "-C", "temporary-test", "-f", &filename]);
+            cmd.args(["-q", "-t", key_type, "-N", passphrase.unwrap_or(""), "-C", "temporary-test", "-f", &filename]);
             if let Some(b) = bits {
                 cmd.args(["-b", b]);
             }
@@ -526,7 +527,7 @@ mod tests {
                 title: format!("test {key_type} {bits:?}"),
                 public_key: Some(public_key),
                 private_key_pem,
-                passphrase: None,
+                passphrase: passphrase.map(str::to_owned),
                 require_confirmation: false,
                 agent_lifetime: None,
             };
@@ -539,8 +540,9 @@ mod tests {
 
             // Verify signatures using the independent modern SSH key verifier;
             // this checks ECDSA r/s framing as well as actual cryptographic validity.
-            let modern = ssh_key_ppk::PrivateKey::from_openssh(source.private_key_pem.trim())
-                .expect("modern SSH parser must accept generated keys");
+            let modern_public = ssh_key_ppk::PublicKey::from_openssh(
+                source.public_key.as_deref().unwrap().trim()
+            ).expect("modern SSH public-key parser must accept generated keys");
             let verify_signature = |sig: &ssh_key::Signature| {
                 let hash = match sig.algorithm() {
                     ssh_key::Algorithm::Rsa { hash: Some(ssh_key::HashAlg::Sha512) } => {
@@ -549,11 +551,11 @@ mod tests {
                     ssh_key::Algorithm::Rsa { .. } => {
                         ssh_key_ppk::Algorithm::Rsa { hash: Some(ssh_key_ppk::HashAlg::Sha256) }
                     }
-                    _ => modern.algorithm(),
+                    _ => modern_public.algorithm(),
                 };
                 let modern_sig = ssh_key_ppk::Signature::new(hash, sig.as_bytes().to_vec())
                     .expect("signature must have valid SSH wire encoding");
-                signature3::Verifier::verify(modern.public_key(), message, &modern_sig)
+                signature3::Verifier::verify(&modern_public, message, &modern_sig)
                     .unwrap_or_else(|e| panic!("{key_type} {bits:?} signature rejected: {e}"));
             };
             verify_signature(&id.sign(message, 0).expect("agent signing must succeed"));
