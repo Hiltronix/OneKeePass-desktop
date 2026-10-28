@@ -40,7 +40,10 @@
                     #(od-events/unlock-ok-on-click password key-file-name)
                     #(od-events/ok-on-click file-name password key-file-name opened-db-list dbs-merge-request))]
     [mui-dialog {:open (if (nil? dialog-show) false dialog-show)
-                 :dir (t/dir)
+                  :dir (t/dir)
+                 :on-close (fn [_e reason]
+                             (when (and (= reason "escapeKeyDown") (not in-progress?))
+                               (od-events/cancel-on-click)))
                  :on-click #(.stopPropagation %)
                  :sx {"& .MuiDialog-paper" {:width "85%"}}}
      [mui-dialog-title (if unlock-request (tr-t "unlockDatabase") (tr-t "openDatabase"))]
