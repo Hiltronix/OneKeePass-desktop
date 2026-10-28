@@ -55,6 +55,50 @@ jobs:
             Set-Content -Path "$vendor/README-HILTRONIX.md" -Value 'Vendored from wiktor-k/ssh-agent-lib v0.6.0 (MIT OR Apache-2.0). Only older ECC feature selection was disabled; ECDSA signing is moved to the existing modern RustCrypto SSH key library. Preserve both upstream licenses.'
           }
 
+      - name: Prepare pinned SSH 0.6 protocol parser without legacy ECDSA libraries
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $vendor = 'src-tauri/vendor/ssh-key'
+          if (-not (Test-Path "$vendor/Cargo.toml" -PathType Leaf)) {
+            $checkout = Join-Path $env:RUNNER_TEMP 'rustcrypto-ssh-v067'
+            git clone --depth 1 --branch 'ssh-key/v0.6.7' https://github.com/RustCrypto/SSH.git $checkout
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            $sha = (git -C $checkout rev-parse HEAD).Trim()
+            if ($sha -ne '6ae2c0850c0febb485fa53678cd622aa0e5f3db5') {
+              throw "Unexpected RustCrypto SSH tag revision: $sha"
+            }
+            Copy-Item -Path "$checkout/ssh-key" -Destination $vendor -Recurse -Force
+            # Retain all upstream attribution and license files.
+            foreach ($license in @('LICENSE-APACHE', 'LICENSE-MIT')) {
+              if (-not (Test-Path "$vendor/$license")) {
+                Copy-Item -Path "$checkout/ssh-key/$license" -Destination "$vendor/$license" -Force
+              }
+            }
+            Get-ChildItem $vendor -Force | Where-Object {
+              $_.Name -notin @('src', 'Cargo.toml', 'LICENSE-APACHE', 'LICENSE-MIT', 'README.md')
+            } | Remove-Item -Recurse -Force
+            $cargo = Get-Content "$vendor/Cargo.toml" -Raw
+            # The source uses the pre-0.14 P-curve APIs only behind these
+            # OPTIONAL signing features; OneKeePass uses only its wire types.
+            $cargo = $cargo.Replace(', path = "../ssh-cipher"', '')
+            $cargo = $cargo.Replace(', path = "../ssh-encoding"', '')
+            foreach ($curve in @('p256', 'p384', 'p521')) {
+              $cargo = $cargo -replace "(?m)^$curve = \\{[^\r\n]*\\}\r?\n", ''
+              $cargo = $cargo -replace "(?m)^    \"$curve\\?/std\",?\r?\n", ''
+              $cargo = $cargo -replace "(?m)^$curve = \\[\\\"dep:$curve\\\", \\\"ecdsa\\\"\\]\r?\n", ''
+            }
+            $cargo = $cargo.Replace(
+              'crypto = ["ed25519", "p256", "p384", "p521", "rsa"]',
+              'crypto = ["ed25519", "rsa"]'
+            )
+            if ($cargo -match '(?m)^p(?:256|384|521) =') {
+              throw 'Old optional ECC dependencies remain in vendored SSH parser'
+            }
+            Set-Content -Path "$vendor/Cargo.toml" -Value $cargo -NoNewline
+            Set-Content -Path "$vendor/README-HILTRONIX.md" -Value 'Source: RustCrypto/SSH ssh-key/v0.6.7 commit 6ae2c0850c0febb485fa53678cd622aa0e5f3db5. License Apache-2.0 OR MIT. Only obsolete optional ECDSA backends removed; OpenSSH parsing and agent protocol types unchanged. Modern ECDSA signing uses internal-russh-forked-ssh-key.'
+          }
+
       - name: Resolve patched dependency graph
         shell: pwsh
         run: |
@@ -122,7 +166,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add src-tauri/Cargo.lock src-tauri/vendor/ssh-agent-lib
+          git add src-tauri/Cargo.lock src-tauri/vendor/ssh-agent-lib src-tauri/vendor/ssh-key
           git diff --cached --quiet
           if ($LASTEXITCODE -eq 0) { exit 0 }
           git commit -m 'Resolve patched Rust crypto dependencies on security branch'
