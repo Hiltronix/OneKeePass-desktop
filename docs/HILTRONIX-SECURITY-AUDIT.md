@@ -323,3 +323,12 @@ In the existing-entry edit screen, Ctrl-S on Windows (Cmd-S on macOS) now invoke
 Both the webview keydown shortcut path and native `MENU_ID_SAVE_DATABASE` menu event are guarded, because Tauri's native `CmdOrControl+S` accelerator may be handled independently of a DOM keydown. This shortcut does not bypass the existing manual database-save behavior: **Apply updates the in-memory KDBX entry**, and saving the KDBX to disk remains governed by the existing Save Database / auto-save workflow and preference.
 
 Windows runtime acceptance: edit an existing entry, change a field, Ctrl-S; confirm identical behavior to Apply and an entry-updated notification. Test invalid fields, no-change editor, nested dialogs, Ctrl-Shift-S, and Ctrl-S in read-only entry view versus the normal Save Database command. No changes to existing new-entry creation flows.
+
+
+## Final Windows source-review closure — revision 2026-10-27-16
+
+A consolidated, source-backed disposition for the Windows portable code review is recorded in `docs/HILTRONIX-FINAL-SOURCE-CODE-SECURITY-REVIEW-2026-10-27.md`, covering the command surface, filesystem path trust boundary, plaintext XML export, native browser registration/network controls, WebView2, clipboard behavior, file permissions, encrypted in-memory keys and SSH-agent IPC. This completes the **source-review phase** only, not runtime or supply-chain verification.
+
+**Additional hardening:** the Windows Pageant IPC implementation previously cast and dereferenced a `Vec<u8>` token buffer directly as an aligned `TOKEN_USER` Rust reference (a potential alignment-related UB). This code now checks the actual buffer length and reads with `std::ptr::read_unaligned`, rejects null owner/user SIDs, and stops including user SID strings in debug logs. Windows CI includes a static regression check; KiTTY/WinSCP Pageant runtime tests remain necessary.
+
+**Do not mark the overall audit complete:** backend IPC still accepts caller-supplied file paths, including plaintext XML export destinations, and the already-flagged Rust advisories remain unresolved. Windows WFP/ETW network testing, a foreign-account SSH-agent denial test, temporary-file/clipboard and actual ACL verification are outside static source inspection. The security-audit workflow's green status is advisory-only, not evidence of zero Rust CVEs.

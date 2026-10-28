@@ -74,6 +74,13 @@ foreach ($AppWindow in $Configuration.app.windows) {
 # Both potentially sensitive local imports must retain bounded reads.
 # The attachment-viewer open command must require an active registered path;
 # mere containment in okp_cache is not authorization to launch a file.
+# Pageant must not form potentially unaligned TOKEN_USER references or log account SIDs.
+$PageantSource = Get-Content -Raw (Join-Path $Root "src-tauri/src/ssh_agent/pageant.rs")
+if ($PageantSource -notmatch 'std::ptr::read_unaligned\(buf\.as_ptr\(\) as \*const TOKEN_USER\)' -or
+    $PageantSource -match '&\*\(buf\.as_ptr\(\) as \*const TOKEN_USER\)' -or
+    $PageantSource -match 'sid_to_string') {
+    throw "Unsafe Pageant TOKEN_USER interpretation or SID logging was reintroduced."
+}
 $AttachmentSource = Get-Content -Raw (Join-Path $Root "src-tauri/src/commands.rs")
 if ($AttachmentSource -notmatch '(?s)fn open_attachment_temp_file.*?attachment_is_active' -or
     $AttachmentSource -notmatch 'active:\s*false') {

@@ -38,9 +38,7 @@ use windows_sys::Win32::Foundation::{
     CloseHandle, GetLastError, LocalFree, ERROR_SUCCESS, HANDLE, HWND, LPARAM, LRESULT, PSID,
     WPARAM,
 };
-use windows_sys::Win32::Security::Authorization::{
-    ConvertSidToStringSidW, GetSecurityInfo, SE_KERNEL_OBJECT,
-};
+use windows_sys::Win32::Security::Authorization::{GetSecurityInfo, SE_KERNEL_OBJECT};
 use windows_sys::Win32::Security::{
     EqualSid, GetTokenInformation, TokenUser, OWNER_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR,
     TOKEN_QUERY, TOKEN_USER,
@@ -400,8 +398,14 @@ unsafe fn mapping_owner_is_current_user(mapping: HANDLE) -> bool {
         return false;
     }
 
-    let owner_sid_text = sid_to_string(owner_sid).unwrap_or_else(|| "<unavailable>".into());
-    let matches = current_user_sid_equals(owner_sid, &owner_sid_text);
+    // Some kernel objects can have no owner SID. Never pass a null SID
+    // to EqualSid; deny the request and free the descriptor as usual.
+    let matches = if owner_sid.is_null() {
+        log::warn!("SSH agent: Pageant mapping has no owner SID");
+        false
+    } else {
+        current_user_sid_equals(owner_sid)
+    };
     if !sd.is_null() {
         LocalFree(sd as *mut c_void);
     }
@@ -409,7 +413,7 @@ unsafe fn mapping_owner_is_current_user(mapping: HANDLE) -> bool {
 }
 
 // True when `other` equals the SID of the user owning this process.
-unsafe fn current_user_sid_equals(other: PSID, other_text: &str) -> bool {
+unsafe fn current_user_sid_equals(other: PSID) -> bool {
     let mut token: HANDLE = 0;
     if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) == 0 {
         log::warn!(
@@ -440,17 +444,15 @@ unsafe fn current_user_sid_equals(other: PSID, other_text: &str) -> bool {
         &mut needed,
     );
 
-    let matches = if ok != 0 && !buf.is_empty() {
-        let token_user = &*(buf.as_ptr() as *const TOKEN_USER);
-        let current_sid_text =
-            sid_to_string(token_user.User.Sid).unwrap_or_else(|| "<unavailable>".into());
-        let matches = EqualSid(token_user.User.Sid, other) != 0;
-        log::debug!(
-            "SSH agent: Pageant SID check mapping_owner={}, current_user={}, matches={}",
-            other_text,
-            current_sid_text,
-            matches
-        );
+    let matches = if ok != 0 && buf.len() >= std::mem::size_of::<TOKEN_USER>() {
+        // A Vec<u8> provides byte alignment, not TOKEN_USER alignment.
+        // Dereferencing a cast pointer would be undefined behavior on Rust
+        // even when x86 happens to tolerate an unaligned machine load.
+        let token_user = std::ptr::read_unaligned(buf.as_ptr() as *const TOKEN_USER);
+        let matches = !token_user.User.Sid.is_null()
+            && EqualSid(token_user.User.Sid, other) != 0;
+        // Do not persist account SIDs in diagnostic logs.
+        log::debug!("SSH agent: Pageant mapping owner matches current user: {matches}");
         matches
     } else {
         log::warn!(
@@ -462,26 +464,6 @@ unsafe fn current_user_sid_equals(other: PSID, other_text: &str) -> bool {
 
     CloseHandle(token);
     matches
-}
-
-// Converts a SID to the standard S-1-... string form for diagnostics.
-unsafe fn sid_to_string(sid: PSID) -> Option<String> {
-    if sid.is_null() {
-        return None;
-    }
-
-    let mut sid_text_ptr: *mut u16 = null_mut();
-    if ConvertSidToStringSidW(sid, &mut sid_text_ptr) == 0 || sid_text_ptr.is_null() {
-        return None;
-    }
-
-    let mut len = 0usize;
-    while *sid_text_ptr.add(len) != 0 {
-        len += 1;
-    }
-    let sid_text = String::from_utf16_lossy(std::slice::from_raw_parts(sid_text_ptr, len));
-    LocalFree(sid_text_ptr as *mut c_void);
-    Some(sid_text)
 }
 
 // Builds a NUL-terminated UTF-16 string for the Win32 wide APIs. The returned
