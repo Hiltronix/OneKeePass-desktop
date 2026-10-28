@@ -42,12 +42,13 @@ crypto_box = "0.9.1"
 ## ssh-agent-lib re-exports (the desktop tree separately resolves ssh-key
 ## 0.7.0-rc via russh/SFTP; the two never cross at the type level). RSA signing
 ## drives the rsa crate directly because ssh-key 0.6.7's RSA Signer is broken.
-ssh-agent-lib = "0.6.0"
+ssh-agent-lib = { path = "vendor/ssh-agent-lib" }
 ssh-key = { version = "0.6.7", features = ["ed25519", "rsa", "ecdsa", "encryption", "getrandom"] }
 ssh-key-ppk = { package = "internal-russh-forked-ssh-key", version = "0.6", features = ["ed25519", "rsa", "ecdsa", "ppk"] }
 rsa = "0.9"
 sha2 = "0.10"
 signature = "2"
+signature3 = { package = "signature", version = "3" }
 
 ## Adding "devtools" to features list enables devtools in production; But in mac it uses private api 
 ## Tauri rust features are listed in the doc home page https://docs.rs/tauri/2.3.1/tauri/
