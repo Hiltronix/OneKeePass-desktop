@@ -39,16 +39,26 @@ impl<const SIZE: usize> Decode for EcdsaPrivateKey<SIZE> {
 
     fn decode(reader: &mut impl Reader) -> Result<Self> {
         reader.read_prefixed(|reader| {
-            if reader.remaining_len() == SIZE.checked_add(1).ok_or(encoding::Error::Length)? {
-                // Strip leading zero
-                // TODO(tarcieri): make sure leading zero was necessary
-                if u8::decode(reader)? != 0 {
-                    return Err(Error::FormatEncoding);
-                }
+            // OpenSSH stores ECDSA scalars as positive mpints, which may be
+            // shorter than the curve's fixed-width scalar size. For example,
+            // a valid P-521 private scalar can occupy 65 instead of 66 bytes.
+            // Left-pad such values before handing them to the fixed-width
+            // representation. Reject empty/oversized values.
+            let len = reader.remaining_len();
+            if len == 0 || len > SIZE.checked_add(1).ok_or(encoding::Error::Length)? {
+                return Err(encoding::Error::Length.into());
             }
 
             let mut bytes = [0u8; SIZE];
-            reader.read(&mut bytes)?;
+            if len == SIZE + 1 {
+                // OpenSSH's positive-mpint sign byte.
+                if u8::decode(reader)? != 0 {
+                    return Err(Error::FormatEncoding);
+                }
+                reader.read(&mut bytes)?;
+            } else {
+                reader.read(&mut bytes[SIZE - len..])?;
+            }
             Ok(Self { bytes })
         })
     }
