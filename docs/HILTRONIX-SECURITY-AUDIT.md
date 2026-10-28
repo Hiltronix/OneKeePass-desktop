@@ -332,3 +332,12 @@ A consolidated, source-backed disposition for the Windows portable code review i
 **Additional hardening:** the Windows Pageant IPC implementation previously cast and dereferenced a `Vec<u8>` token buffer directly as an aligned `TOKEN_USER` Rust reference (a potential alignment-related UB). This code now checks the actual buffer length and reads with `std::ptr::read_unaligned`, rejects null owner/user SIDs, and stops including user SID strings in debug logs. Windows CI includes a static regression check; KiTTY/WinSCP Pageant runtime tests remain necessary.
 
 **Do not mark the overall audit complete:** backend IPC still accepts caller-supplied file paths, including plaintext XML export destinations, and the already-flagged Rust advisories remain unresolved. Windows WFP/ETW network testing, a foreign-account SSH-agent denial test, temporary-file/clipboard and actual ACL verification are outside static source inspection. The security-audit workflow's green status is advisory-only, not evidence of zero Rust CVEs.
+
+
+## Removed unused plaintext XML export IPC (2026-10-27-17)
+
+The Windows GUI does **not** expose an XML export feature. Previous source-review wording suggesting an XML export file picker was inaccurate: the desktop frontend held two `background.cljs` wrappers but no corresponding visible XML export command. Nevertheless both Rust functions were registered in Tauri's command dispatcher and could be invoked by JavaScript within the privileged WebView.
+
+With explicit user approval, removed `commands::export_as_xml` and `commands::export_main_content_as_xml` from the Tauri dispatcher, deleted their Rust command implementations from `src-tauri/src/commands.rs`, and deleted `export-as-xml` and `export-main-content-as-xml` from `src-cljs/main/onekeepass/frontend/background.cljs`. The underlying shared-core library APIs are untouched, but are no longer exposed through these desktop commands. A Windows packaging guard rejects restoring the removed entry points.
+
+**Result:** The specific unused plaintext XML export IPC exposure is closed. This is **not** a general file authorization fix; existing KDBX Save As, attachments, keyfile, icon, SSH-key and CSV import paths remain supported and still need separate consideration where frontend-provided filesystem paths cross the Rust IPC boundary. Build verification and runtime acceptance remain separate.

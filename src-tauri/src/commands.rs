@@ -1301,21 +1301,6 @@ pub(crate) async fn score_password(password: &str) -> Result<kp_service::Passwor
     Ok(password.into())
 }
 
-#[command]
-pub(crate) async fn export_main_content_as_xml(db_key: &str, xml_file_name: &str) -> Result<()> {
-    // This will just export the main content
-    Ok(kp_service::export_main_content_as_xml(
-        db_key,
-        xml_file_name,
-    )?)
-}
-
-#[command]
-pub(crate) async fn export_as_xml(db_key: &str, xml_file_name: &str) -> Result<()> {
-    // This will refresh struct before xml export
-    Ok(kp_service::export_as_xml(db_key, xml_file_name)?)
-}
-
 #[tauri::command]
 pub async fn load_language_translations<R: Runtime>(
     app: tauri::AppHandle<R>,

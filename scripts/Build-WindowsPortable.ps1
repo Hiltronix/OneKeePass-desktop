@@ -71,6 +71,17 @@ foreach ($AppWindow in $Configuration.app.windows) {
         throw "WebView2 general autofill must be explicitly disabled on every window."
     }
 }
+# Plaintext XML export was never exposed in the Windows UI, but both Rust
+# commands were still callable by a renderer. Do not re-register these IPC
+# commands or restore their ClojureScript invoke wrappers.
+$BackendCommands = Get-Content -Raw (Join-Path $Root "src-tauri/src/commands.rs")
+$TauriMain = Get-Content -Raw (Join-Path $Root "src-tauri/src/main.rs")
+$FrontendBackground = Get-Content -Raw (Join-Path $Root "src-cljs/main/onekeepass/frontend/background.cljs")
+foreach ($Source in @($BackendCommands, $TauriMain, $FrontendBackground)) {
+    if ($Source -match '(?<![A-Za-z0-9_-])(?:export_as_xml|export_main_content_as_xml|export-as-xml|export-main-content-as-xml)(?![A-Za-z0-9_-])') {
+        throw "Obsolete plaintext XML export IPC command or frontend wrapper was reintroduced."
+    }
+}
 # Both potentially sensitive local imports must retain bounded reads.
 # The attachment-viewer open command must require an active registered path;
 # mere containment in okp_cache is not authorization to launch a file.

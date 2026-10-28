@@ -255,8 +255,6 @@ fn main() {
             commands::entry_list_current_otps,
             commands::entry_summary_data,
             commands::entry_type_headers,
-            commands::export_as_xml,
-            commands::export_main_content_as_xml,
             commands::form_otp_url,
             commands::generate_key_file,
             commands::generate_password_phrase,

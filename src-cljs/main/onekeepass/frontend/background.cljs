@@ -940,12 +940,6 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;  
 
-(defn export-main-content-as-xml [db-key xml-file-name]
-  (invoke-api "export_main_content_as_xml"  {:db-key db-key :xml-file-name xml-file-name} #(println %)))
-
-(defn export-as-xml [db-key xml-file-name]
-  (invoke-api "export_as_xml"  {:db-key db-key :xml-file-name xml-file-name} #(println %)))
-
 #_(defn test-call [arg-m]
     ;; test_call is a tauri command function that accetps TestArg in "arg" parameter
     ;; Useful during development 
