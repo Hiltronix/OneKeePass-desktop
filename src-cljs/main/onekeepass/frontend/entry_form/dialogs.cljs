@@ -55,6 +55,9 @@
                                   api-error-text
                                   error-fields]}]
   [mui-dialog {:open (if (nil? dialog-show) false dialog-show)
+               :on-close (fn [_e reason]
+                           (when (= reason "escapeKeyDown")
+                             (dlg-events/otp-settings-dialog-close)))
                :on-click #(.stopPropagation %)
                :sx {"& .MuiPaper-root" {:width "60%"}}}
 
@@ -155,7 +158,12 @@
                :sx {:z-index 2 :min-width "400px"}}
    #_[mui-click-away-listener #_{:onClickAway (fn [e] (println "Clicked outside box" (.-currentTarget e)))}]
 
-   [mui-box {:sx (theme-popper-box-sx @custom-theme-atom)}
+   [mui-box {:sx (theme-popper-box-sx @custom-theme-atom)
+             :on-key-down (fn [e]
+                            (when (= (.-key e) "Escape")
+                              (.stopPropagation e)
+                              (.preventDefault e)
+                              (form-events/section-name-dialog-update :dialog-show false)))}
     [mui-stack [mui-typography (if (= mode :add)
                                  (tr-l "newsectionName") (tr-l "modifySectionName"))]]
     [mui-stack [mui-dialog-content {:dividers true}
@@ -205,6 +213,9 @@
         protected-disabled? (contains? #{const/BOOL_TYPE const/DATE_TYPE}
                                        (or data-type const/TEXT_TYPE))]
     [mui-dialog {:open dialog-show 
+                 :on-close (fn [_e reason]
+                             (when (= reason "escapeKeyDown")
+                               (form-events/section-field-dialog-update :dialog-show false)))
                  :dir (t/dir)
                  :on-click #(.stopPropagation ^js/Event %)
                  ;; This will set the Paper width in all child components 
@@ -437,7 +448,7 @@
      [mui-dialog-content {:dividers true}
       [mui-stack {:sx {:width "100%"}}
        [mui-stack {:direction "row" :sx {:width "100%" :margin-bottom "10px"}}
-        [mui-text-field
+        [m/text-field
          {:label (tr-l "newTitle")
           :value new-title
           :sx  {}
