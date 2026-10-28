@@ -155,3 +155,9 @@ devtools = ["tauri/devtools"]
 
 [dev-dependencies]
 env_logger = "0.11.8"
+
+# Keep the stable ssh-key 0.6 wire-protocol types without its obsolete
+# optional RustCrypto P-256/P-384/P-521 0.13 cryptography implementations.
+# ECDSA signing is performed by internal-russh-forked-ssh-key instead.
+[patch.crates-io]
+ssh-key = { path = "vendor/ssh-key" }
