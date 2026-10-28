@@ -32,6 +32,8 @@ struct StoredIdentity {
     comment: String,
     // Decoded + decrypted private key. Zeroized on drop by ssh-key.
     key: PrivateKey,
+    // Modern RustCrypto-based ECDSA key, kept only for ECDSA identities.
+    modern_ecdsa_key: Option<ssh_key_ppk::PrivateKey>,
     // Public half, derived from `key`. The advertised identity and the value a
     // sign request is matched against. Never the entry's stored "Public Key".
     public_key_data: KeyData,
@@ -79,6 +81,27 @@ impl StoredIdentity {
     // when the stored public key contradicts the private key.
     fn from_source(src: &SshAgentKeySource) -> Result<Self, String> {
         let decoded = decode_identity(src)?;
+        // Keep the stable SSH Agent wire types while using the modern
+        // cryptographic implementation for ECDSA P-256/P-384/P-521.
+        let modern_ecdsa_key = if matches!(decoded.key.algorithm(), Algorithm::Ecdsa { .. }) {
+            let pem = normalize_private_key_pem(
+                &src.private_key_pem,
+                src.passphrase.as_deref().filter(|p| !p.is_empty()),
+            )?;
+            let parsed = ssh_key_ppk::PrivateKey::from_openssh(pem.trim())
+                .map_err(|e| format!("Modern ECDSA private key parse failed: {e}"))?;
+            let modern = if parsed.is_encrypted() {
+                let pass = src.passphrase.as_deref().filter(|p| !p.is_empty())
+                    .ok_or_else(|| "ECDSA key is encrypted but no passphrase is set".to_string())?;
+                parsed.decrypt(pass)
+                    .map_err(|e| format!("Modern ECDSA decrypt failed: {e}"))?
+            } else {
+                parsed
+            };
+            Some(modern)
+        } else {
+            None
+        };
         let expires_at = decoded.lifetime
             .map(|d| Instant::now().checked_add(d)
                 .ok_or_else(|| "Agent Lifetime exceeds the supported range".to_string()))
@@ -88,6 +111,7 @@ impl StoredIdentity {
             db_key: decoded.db_key,
             comment: decoded.comment,
             key: decoded.key,
+            modern_ecdsa_key,
             public_key_data: decoded.public_key_data,
             require_confirmation: decoded.require_confirmation,
             expires_at,
@@ -109,8 +133,15 @@ impl StoredIdentity {
             // ssh-key 0.6.7's high-level RSA signer is broken (it builds primes
             // as [p, p]); drive the rsa crate directly with the correct primes.
             Algorithm::Rsa { .. } => sign_rsa_with_flags(&self.key, data, flags),
-            // Ed25519 / ECDSA: the algorithm is fixed by the key, flags are
-            // irrelevant, and the Signer path is correct.
+            Algorithm::Ecdsa { .. } => {
+                let key = self.modern_ecdsa_key.as_ref()
+                    .ok_or_else(|| "missing modern ECDSA signing key".to_string())?;
+                let sig: ssh_key_ppk::Signature = signature3::Signer::try_sign(key, data)
+                    .map_err(|e| format!("modern ECDSA signing failed: {e}"))?;
+                Signature::new(self.key.algorithm(), sig.as_bytes().to_vec())
+                    .map_err(|e| format!("ECDSA agent signature encoding failed: {e}"))
+            }
+            // Preserve the existing Ed25519 and RSA signing behavior.
             _ => signature::Signer::try_sign(&self.key, data)
                 .map_err(|e| format!("sign failed: {e}")),
         }
