@@ -32,6 +32,8 @@ struct StoredIdentity {
     comment: String,
     // Decoded + decrypted private key. Zeroized on drop by ssh-key.
     key: PrivateKey,
+    // Modern RustCrypto-based ECDSA key, kept only for ECDSA identities.
+    modern_ecdsa_key: Option<ssh_key_ppk::PrivateKey>,
     // Public half, derived from `key`. The advertised identity and the value a
     // sign request is matched against. Never the entry's stored "Public Key".
     public_key_data: KeyData,
@@ -79,6 +81,22 @@ impl StoredIdentity {
     // when the stored public key contradicts the private key.
     fn from_source(src: &SshAgentKeySource) -> Result<Self, String> {
         let decoded = decode_identity(src)?;
+        // Keep the stable SSH Agent wire types while using the modern
+        // cryptographic implementation for ECDSA P-256/P-384/P-521.
+        let modern_ecdsa_key = if matches!(decoded.key.algorithm(), Algorithm::Ecdsa { .. }) {
+            // The legacy parser has already normalized PPK/OpenSSH input,
+            // validated the public key, and decrypted any passphrase.
+            // Re-encode that same key in memory rather than using decrypt
+            // APIs not provided by the modern SSH signing implementation.
+            let plain_pem = decoded.key
+                .to_openssh(ssh_key::LineEnding::LF)
+                .map_err(|e| format!("ECDSA private key serialization failed: {e}"))?;
+            let modern = ssh_key_ppk::PrivateKey::from_openssh(plain_pem.as_str())
+                .map_err(|e| format!("Modern ECDSA private key parse failed: {e}"))?;
+            Some(modern)
+        } else {
+            None
+        };
         let expires_at = decoded.lifetime
             .map(|d| Instant::now().checked_add(d)
                 .ok_or_else(|| "Agent Lifetime exceeds the supported range".to_string()))
@@ -88,6 +106,7 @@ impl StoredIdentity {
             db_key: decoded.db_key,
             comment: decoded.comment,
             key: decoded.key,
+            modern_ecdsa_key,
             public_key_data: decoded.public_key_data,
             require_confirmation: decoded.require_confirmation,
             expires_at,
@@ -109,8 +128,15 @@ impl StoredIdentity {
             // ssh-key 0.6.7's high-level RSA signer is broken (it builds primes
             // as [p, p]); drive the rsa crate directly with the correct primes.
             Algorithm::Rsa { .. } => sign_rsa_with_flags(&self.key, data, flags),
-            // Ed25519 / ECDSA: the algorithm is fixed by the key, flags are
-            // irrelevant, and the Signer path is correct.
+            Algorithm::Ecdsa { .. } => {
+                let key = self.modern_ecdsa_key.as_ref()
+                    .ok_or_else(|| "missing modern ECDSA signing key".to_string())?;
+                let sig: ssh_key_ppk::Signature = signature3::Signer::try_sign(key, data)
+                    .map_err(|e| format!("modern ECDSA signing failed: {e}"))?;
+                Signature::new(self.key.algorithm(), sig.as_bytes().to_vec())
+                    .map_err(|e| format!("ECDSA agent signature encoding failed: {e}"))
+            }
+            // Preserve the existing Ed25519 and RSA signing behavior.
             _ => signature::Signer::try_sign(&self.key, data)
                 .map_err(|e| format!("sign failed: {e}")),
         }
@@ -450,6 +476,100 @@ impl SshAgentStore {
 mod tests {
     use super::parse_lifetime;
     use std::time::Duration;
+
+    // Real OpenSSH keys exercise format compatibility and the agent's
+    // algorithm-specific signing. No keys are checked into the repository:
+    // ssh-keygen creates disposable test fixtures under the runner temp dir.
+    #[cfg(windows)]
+    #[test]
+    fn openssh_key_signing_roundtrips_all_supported_algorithms() {
+        use super::{StoredIdentity, SSH_AGENT_RSA_SHA2_512};
+        use onekeepass_core::db_service::ssh_agent::SshAgentKeySource;
+        use std::fs;
+        use std::process::Command;
+
+        let message = b"OneKeePass isolated SSH agent cryptography test";
+        let cases = [
+            ("ed25519", None, None),
+            ("ecdsa", Some("256"), None),
+            ("ecdsa", Some("256"), Some("temporary-test-passphrase")),
+            ("ecdsa", Some("384"), None),
+            ("ecdsa", Some("521"), None),
+            ("rsa", Some("2048"), None),
+        ];
+
+        for (key_type, bits, passphrase) in cases {
+            // P-521 uses a variable-length positive mpint. Repeated random
+            // generations cover leading-zero / shortened-scalar encodings.
+            let repetitions = if bits == Some("521") { 16 } else { 1 };
+            for _ in 0..repetitions {
+            let stem = std::env::temp_dir().join(format!(
+                "onekeepass-ssh-test-{}",
+                uuid::Uuid::new_v4()
+            ));
+            let filename = stem.to_string_lossy().into_owned();
+            let mut cmd = Command::new("ssh-keygen");
+            cmd.args(["-q", "-t", key_type, "-N", passphrase.unwrap_or(""), "-C", "temporary-test", "-f", &filename]);
+            if let Some(b) = bits {
+                cmd.args(["-b", b]);
+            }
+            let result = cmd.output().expect("ssh-keygen must be available on Windows CI");
+            assert!(
+                result.status.success(),
+                "ssh-keygen {key_type} {bits:?} failed: {}",
+                String::from_utf8_lossy(&result.stderr)
+            );
+
+            let private_key_pem = fs::read_to_string(&stem).unwrap();
+            let public_key = fs::read_to_string(format!("{filename}.pub")).unwrap();
+            let _ = fs::remove_file(&stem);
+            let _ = fs::remove_file(format!("{filename}.pub"));
+
+            let source = SshAgentKeySource {
+                db_key: "unit-test-db".into(),
+                entry_uuid: uuid::Uuid::new_v4(),
+                title: format!("test {key_type} {bits:?}"),
+                public_key: Some(public_key),
+                private_key_pem,
+                passphrase: passphrase.map(str::to_owned),
+                require_confirmation: false,
+                agent_lifetime: None,
+            };
+
+            // The stable agent protocol parser must load the exact key
+            // produced by ssh-keygen, including its public-key identity.
+            let id = StoredIdentity::from_source(&source)
+                .unwrap_or_else(|e| panic!("{key_type} {bits:?} parse failed: {e}"));
+            assert!(!id.public_key_data.fingerprint(ssh_key::HashAlg::Sha256).to_string().is_empty());
+
+            // Verify signatures using the independent modern SSH key verifier;
+            // this checks ECDSA r/s framing as well as actual cryptographic validity.
+            let modern_public = ssh_key_ppk::PublicKey::from_openssh(
+                source.public_key.as_deref().unwrap().trim()
+            ).expect("modern SSH public-key parser must accept generated keys");
+            let verify_signature = |sig: &ssh_key::Signature| {
+                let hash = match sig.algorithm() {
+                    ssh_key::Algorithm::Rsa { hash: Some(ssh_key::HashAlg::Sha512) } => {
+                        ssh_key_ppk::Algorithm::Rsa { hash: Some(ssh_key_ppk::HashAlg::Sha512) }
+                    }
+                    ssh_key::Algorithm::Rsa { .. } => {
+                        ssh_key_ppk::Algorithm::Rsa { hash: Some(ssh_key_ppk::HashAlg::Sha256) }
+                    }
+                    _ => modern_public.algorithm(),
+                };
+                let modern_sig = ssh_key_ppk::Signature::new(hash, sig.as_bytes().to_vec())
+                    .expect("signature must have valid SSH wire encoding");
+                signature3::Verifier::verify(&modern_public, message, &modern_sig)
+                    .unwrap_or_else(|e| panic!("{key_type} {bits:?} signature rejected: {e}"));
+            };
+            verify_signature(&id.sign(message, 0).expect("agent signing must succeed"));
+            if key_type == "rsa" {
+                verify_signature(&id.sign(message, SSH_AGENT_RSA_SHA2_512)
+                    .expect("RSA SHA2-512 agent signing must succeed"));
+            }
+            }
+        }
+    }
 
     #[test]
     fn lifetime_seconds() {

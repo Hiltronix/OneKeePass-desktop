@@ -1,0 +1,187 @@
+name: Validate crypto-bigint security migration
+
+on:
+  push:
+    branches:
+      - security/crypto-bigint-0.7.10
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: crypto-bigint-security-migration
+  cancel-in-progress: true
+
+jobs:
+  resolve-and-validate:
+    runs-on: windows-2022
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Set up Visual Studio MSVC compiler
+        uses: ilammy/msvc-dev-cmd@v1
+      - name: Cache Windows Rust build dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: crypto-bigint-ssh-migration
+
+      - name: Prepare pinned SSH agent protocol vendor
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $vendor = 'src-tauri/vendor/ssh-agent-lib'
+          if (-not (Test-Path "$vendor/Cargo.toml" -PathType Leaf)) {
+            # Clone the verified v0.6.0 upstream commit, not a moving branch.
+            git clone --depth 1 --branch v0.6.0 https://github.com/wiktor-k/ssh-agent-lib.git $vendor
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            $sha = (git -C $vendor rev-parse HEAD).Trim()
+            if ($sha -ne '59707d160628ca4804a7e21cf4e8a5cdc59f2e02') {
+              throw "Unexpected ssh-agent-lib upstream revision: $sha"
+            }
+            # Keep original licenses and Rust source; do not import .git,
+            # upstream fuzzing, CI, examples or test assets into our tree.
+            Get-ChildItem $vendor -Force | Where-Object {
+              $_.Name -notin @('src', 'Cargo.toml', 'LICENSE-APACHE', 'LICENSE-MIT', 'README.md')
+            } | Remove-Item -Recurse -Force
+            $cargo = Get-Content "$vendor/Cargo.toml" -Raw
+            $original = 'ssh-key = { version = "0.6", features = ["crypto", "alloc"] }'
+            $updated = 'ssh-key = { version = "0.6.7", features = ["ed25519", "rsa", "ecdsa", "encryption", "getrandom", "alloc"] }'
+            if (-not $cargo.Contains($original)) { throw "Unexpected upstream ssh-key feature declaration" }
+            $cargo = $cargo.Replace($original, $updated)
+            $cargo = $cargo.Replace('members = [".", "fuzz"]', 'members = ["."]')
+            $cargo = $cargo.Replace('ssh-key = { version = "0.6.7", features = ["p256", "rsa"] }', 'ssh-key = { version = "0.6.7", features = ["ed25519", "rsa"] }')
+            $cargo = $cargo.Replace("p256 = { version = ""0.13.2"" }`n", '')
+            Set-Content -Path "$vendor/Cargo.toml" -Value $cargo -NoNewline
+            Set-Content -Path "$vendor/README-HILTRONIX.md" -Value 'Vendored from wiktor-k/ssh-agent-lib v0.6.0 (MIT OR Apache-2.0). Only older ECC feature selection was disabled; ECDSA signing is moved to the existing modern RustCrypto SSH key library. Preserve both upstream licenses.'
+          }
+
+      - name: Prepare pinned SSH 0.6 protocol parser without legacy ECDSA libraries
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $vendor = 'src-tauri/vendor/ssh-key'
+          if (-not (Test-Path "$vendor/Cargo.toml" -PathType Leaf)) {
+            $checkout = Join-Path $env:RUNNER_TEMP 'rustcrypto-ssh-v067'
+            git clone --depth 1 --branch 'ssh-key/v0.6.7' https://github.com/RustCrypto/SSH.git $checkout
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            $sha = (git -C $checkout rev-parse HEAD).Trim()
+            if ($sha -ne '6ae2c0850c0febb485fa53678cd622aa0e5f3db5') {
+              throw "Unexpected RustCrypto SSH tag revision: $sha"
+            }
+            Copy-Item -Path "$checkout/ssh-key" -Destination $vendor -Recurse -Force
+            # Retain all upstream attribution and license files.
+            foreach ($license in @('LICENSE-APACHE', 'LICENSE-MIT')) {
+              if (-not (Test-Path "$vendor/$license")) {
+                Copy-Item -Path "$checkout/ssh-key/$license" -Destination "$vendor/$license" -Force
+              }
+            }
+            Get-ChildItem $vendor -Force | Where-Object {
+              $_.Name -notin @('src', 'Cargo.toml', 'LICENSE-APACHE', 'LICENSE-MIT', 'README.md')
+            } | Remove-Item -Recurse -Force
+            $cargo = Get-Content "$vendor/Cargo.toml" -Raw
+            # The source uses the pre-0.14 P-curve APIs only behind these
+            # OPTIONAL signing features; OneKeePass uses only its wire types.
+            $cargo = $cargo.Replace(', path = "../ssh-cipher"', '')
+            $cargo = $cargo.Replace(', path = "../ssh-encoding"', '')
+            # Filter only the feature/dependency lines using exact prefixes;
+            # source crypto APIs remain untouched.
+            $removePrefixes = @(
+              'p256 = {', 'p384 = {', 'p521 = {',
+              'p256 = ["dep:', 'p384 = ["dep:', 'p521 = ["dep:',
+              '    "p256?/std",', '    "p384?/std",', '    "p521?/std",'
+            )
+            $filtered = foreach ($line in ($cargo -split "\r?\n")) {
+              $skip = $false
+              foreach ($prefix in $removePrefixes) {
+                if ($line.StartsWith($prefix)) { $skip = $true; break }
+              }
+              if (-not $skip) { $line }
+            }
+            $cargo = ($filtered -join "`n") + "`n"
+            $cargo = $cargo.Replace(
+              'crypto = ["ed25519", "p256", "p384", "p521", "rsa"]',
+              'crypto = ["ed25519", "rsa"]'
+            )
+            if ($cargo -match '(?m)^p(?:256|384|521) =') {
+              throw 'Old optional ECC dependencies remain in vendored SSH parser'
+            }
+            Set-Content -Path "$vendor/Cargo.toml" -Value $cargo -NoNewline
+            Set-Content -Path "$vendor/README-HILTRONIX.md" -Value 'Source: RustCrypto/SSH ssh-key/v0.6.7 commit 6ae2c0850c0febb485fa53678cd622aa0e5f3db5. License Apache-2.0 OR MIT. Only obsolete optional ECDSA backends removed; OpenSSH parsing and agent protocol types unchanged. Modern ECDSA signing uses internal-russh-forked-ssh-key.'
+          }
+
+      - name: Resolve patched dependency graph
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          cargo update --manifest-path src-tauri/Cargo.toml --package onekeepass-core
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $LockText = Get-Content src-tauri/Cargo.lock -Raw
+          if ($LockText -match '(?s)\[\[package\]\]\s+name = "crypto-bigint"\s+version = "0\.7\.6"') {
+            cargo update --manifest-path src-tauri/Cargo.toml --package crypto-bigint@0.7.6 --precise 0.7.10
+          } else {
+            cargo update --manifest-path src-tauri/Cargo.toml --package crypto-bigint@0.7.10 --precise 0.7.10
+          }
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          # A green job must mean the old vulnerable branch is entirely
+          # absent from Cargo.lock, including optional/transitive dependencies.
+          $ResolvedLock = Get-Content src-tauri/Cargo.lock -Raw
+          if ($ResolvedLock -match '(?s)\[\[package\]\]\s+name = "crypto-bigint"\s+version = "0\.5\.5"') {
+            throw 'crypto-bigint 0.5.5 remains in Cargo.lock'
+          }
+          if ($ResolvedLock -notmatch '(?s)\[\[package\]\]\s+name = "crypto-bigint"\s+version = "0\.7\.10"') {
+            throw 'crypto-bigint 0.7.10 missing from Cargo.lock'
+          }
+          Write-Host 'PASS: crypto-bigint 0.7.10 is present and 0.5.5 is absent'
+          cargo tree --manifest-path src-tauri/Cargo.toml --invert crypto-bigint@0.7.10
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo metadata --manifest-path src-tauri/Cargo.toml --locked --format-version 1 > $null
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Compile desktop and shared-core code
+        shell: pwsh
+        run: |
+          # Use the existing offline Windows Tauri config, which disables the unused proxy sidecar.
+          $env:TAURI_CONFIG = Get-Content src-tauri/tauri.windows-offline.conf.json -Raw
+          cargo check --manifest-path src-tauri/Cargo.toml --locked
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Check out pinned core for isolated unit tests
+        uses: actions/checkout@v4
+        with:
+          repository: Hiltronix/OneKeePass-onekeepass-core
+          ref: c8da1b1d90c5e6aa2db1f33dad794e545dd664d7
+          path: core-security-tests
+          persist-credentials: false
+
+      - name: Test passkey cryptography
+        shell: pwsh
+        run: |
+          cargo test --manifest-path core-security-tests/Cargo.toml --lib passkey_crypto
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Test SSH Agent
+        shell: pwsh
+        run: |
+          $env:TAURI_CONFIG = Get-Content src-tauri/tauri.windows-offline.conf.json -Raw
+          cargo test --manifest-path src-tauri/Cargo.toml --locked --bin onekeepass-frontend ssh_agent::store::tests
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Preserve validated lockfile on security branch
+        shell: pwsh
+        run: |
+          git diff --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src-tauri/Cargo.lock src-tauri/vendor/ssh-agent-lib src-tauri/vendor/ssh-key
+          git diff --cached --quiet
+          if ($LASTEXITCODE -eq 0) { exit 0 }
+          git commit -m 'Resolve patched Rust crypto dependencies on security branch'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git push origin HEAD:security/crypto-bigint-0.7.10
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

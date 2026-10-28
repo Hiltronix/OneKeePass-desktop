@@ -1,0 +1,1 @@
+Vendored from wiktor-k/ssh-agent-lib v0.6.0 (MIT OR Apache-2.0). Only older ECC feature selection was disabled; ECDSA signing is moved to the existing modern RustCrypto SSH key library. Preserve both upstream licenses.

@@ -1,0 +1,1 @@
+Source: RustCrypto/SSH ssh-key/v0.6.7 commit 6ae2c0850c0febb485fa53678cd622aa0e5f3db5. License Apache-2.0 OR MIT. Only obsolete optional ECDSA backends removed; OpenSSH parsing and agent protocol types unchanged. Modern ECDSA signing uses internal-russh-forked-ssh-key.

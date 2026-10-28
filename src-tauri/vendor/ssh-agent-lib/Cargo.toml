@@ -1,0 +1,76 @@
+[package]
+name = "ssh-agent-lib"
+description = "A collection of types for writing custom SSH agents"
+version = "0.6.0"
+license = "MIT OR Apache-2.0"
+authors = [
+    "Wiktor Kwapisiewicz <wiktor@metacode.biz>",
+    "Arthur Gautier <arthur.gautier@arista.com>",
+    "James Spencer <github@jcspencer.net>"
+]
+repository = "https://github.com/wiktor-k/ssh-agent-lib"
+edition = "2021"
+rust-version = "1.75"
+keywords = ["ssh", "agent", "authentication", "openssh", "async"]
+categories = ["authentication", "cryptography", "encoding", "network-programming", "parsing"]
+exclude = [".github"]
+
+[workspace]
+members = ["."]
+
+[dependencies]
+byteorder = "1"
+async-trait = { version = "0.1", optional = true }
+futures = { version = "0.3", optional = true }
+log = { version = "0.4", optional = true }
+tokio = { version = "1", optional = true, features = ["rt", "net", "time"] }
+tokio-util = { version = "0.7", optional = true, features = ["codec"] }
+service-binding = { version = "^3", optional = true }
+ssh-encoding = { version = "0.2" }
+ssh-key = { version = "0.6.7", features = ["ed25519", "rsa", "ecdsa", "encryption", "getrandom", "alloc"] }
+thiserror = "2"
+subtle = { version = "2", default-features = false }
+signature = { version = "2", features = ["alloc"] }
+secrecy = "0.10"
+
+[features]
+default = ["agent"]
+codec = ["tokio-util"]
+agent = ["futures", "log", "tokio", "async-trait", "codec", "service-binding"]
+
+[dev-dependencies]
+env_logger = "0.11.10"
+rand = "0.8"
+rsa = { version = "0.9.10", features = ["sha2", "sha1"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync"] }
+sha1 = { version = "0.10.6", default-features = false, features = ["oid"] }
+testresult = "0.4.1"
+hex-literal = "0.4.1"
+ssh-key = { version = "0.6.7", features = ["ed25519", "rsa"] }
+const-str = "0.5.7"
+rstest = "0.26.1"
+clap = { version = "4.5.61", features = ["derive"] }
+secrecy = "0.10.3"
+
+[target.'cfg(target_os = "windows")'.dev-dependencies]
+interprocess = "2.4.2"
+
+[[example]]
+name = "agent-socket-info"
+required-features = ["agent"]
+
+[[example]]
+name = "key-storage"
+required-features = ["agent"]
+
+[[example]]
+name = "proto-dumper"
+required-features = ["agent"]
+
+[[example]]
+name = "random-key"
+required-features = ["agent"]
+
+[[example]]
+name = "ssh-agent-client"
+required-features = ["agent"]

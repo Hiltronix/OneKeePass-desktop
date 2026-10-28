@@ -42,12 +42,13 @@ crypto_box = "0.9.1"
 ## ssh-agent-lib re-exports (the desktop tree separately resolves ssh-key
 ## 0.7.0-rc via russh/SFTP; the two never cross at the type level). RSA signing
 ## drives the rsa crate directly because ssh-key 0.6.7's RSA Signer is broken.
-ssh-agent-lib = "0.6.0"
+ssh-agent-lib = { path = "vendor/ssh-agent-lib" }
 ssh-key = { version = "0.6.7", features = ["ed25519", "rsa", "ecdsa", "encryption", "getrandom"] }
-ssh-key-ppk = { package = "internal-russh-forked-ssh-key", version = "0.6", features = ["ed25519", "rsa", "ecdsa", "ppk"] }
+ssh-key-ppk = { package = "internal-russh-forked-ssh-key", version = "0.6", features = ["ed25519", "rsa", "p256", "p384", "p521", "ppk"] }
 rsa = "0.9"
 sha2 = "0.10"
 signature = "2"
+signature3 = { package = "signature", version = "3" }
 
 ## Adding "devtools" to features list enables devtools in production; But in mac it uses private api 
 ## Tauri rust features are listed in the doc home page https://docs.rs/tauri/2.3.1/tauri/
@@ -58,7 +59,7 @@ tauri = { version = "2", features = [] }
 ## onekeepass-core = {path = "../../onekeepass-core", version = "0.25.1", features = ["favicon", "desktop-ssh-agent"] }
 
 ## Need to use the git ref for release
-onekeepass-core = {git = "https://github.com/Hiltronix/OneKeePass-onekeepass-core.git" , rev = "68d4a6d21930503566479b55db6a66d93b12e200", features = ["favicon-local", "desktop-ssh-agent"] }
+onekeepass-core = {git = "https://github.com/Hiltronix/OneKeePass-onekeepass-core.git" , rev = "c8da1b1d90c5e6aa2db1f33dad794e545dd664d7", features = ["favicon-local", "desktop-ssh-agent"] }
 
 tauri-plugin-shell = "2"
 tauri-plugin-process = "2"
@@ -154,3 +155,9 @@ devtools = ["tauri/devtools"]
 
 [dev-dependencies]
 env_logger = "0.11.8"
+
+# Keep the stable ssh-key 0.6 wire-protocol types without its obsolete
+# optional RustCrypto P-256/P-384/P-521 0.13 cryptography implementations.
+# ECDSA signing is performed by internal-russh-forked-ssh-key instead.
+[patch.crates-io]
+ssh-key = { path = "vendor/ssh-key" }
