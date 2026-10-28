@@ -58,7 +58,7 @@ tauri = { version = "2", features = [] }
 ## onekeepass-core = {path = "../../onekeepass-core", version = "0.25.1", features = ["favicon", "desktop-ssh-agent"] }
 
 ## Need to use the git ref for release
-onekeepass-core = {git = "https://github.com/Hiltronix/OneKeePass-onekeepass-core.git" , rev = "68d4a6d21930503566479b55db6a66d93b12e200", features = ["favicon-local", "desktop-ssh-agent"] }
+onekeepass-core = {git = "https://github.com/Hiltronix/OneKeePass-onekeepass-core.git" , rev = "00ec93d69bb9aa195a3e1a88244fb21945692cb5", features = ["favicon-local", "desktop-ssh-agent"] }
 
 tauri-plugin-shell = "2"
 tauri-plugin-process = "2"
