@@ -1,0 +1,66 @@
+name: Validate crypto-bigint security migration
+
+on:
+  push:
+    branches:
+      - security/crypto-bigint-0.7.10
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: crypto-bigint-security-migration
+  cancel-in-progress: false
+
+jobs:
+  resolve-and-validate:
+    runs-on: windows-2022
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Resolve patched dependency graph
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          cargo update --manifest-path src-tauri/Cargo.toml --package onekeepass-core
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo update --manifest-path src-tauri/Cargo.toml --package crypto-bigint@0.7.6 --precise 0.7.10
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo tree --manifest-path src-tauri/Cargo.toml --invert crypto-bigint@0.5.5
+          if ($LASTEXITCODE -ne 0) { Write-Host 'Old crypto-bigint family removed' }
+          cargo tree --manifest-path src-tauri/Cargo.toml --invert crypto-bigint@0.7.10
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo metadata --manifest-path src-tauri/Cargo.toml --locked --format-version 1 > $null
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Compile desktop and shared-core code
+        shell: pwsh
+        run: |
+          cargo check --manifest-path src-tauri/Cargo.toml --locked
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Test passkey cryptography
+        shell: pwsh
+        run: |
+          cargo test --manifest-path src-tauri/Cargo.toml --locked -p onekeepass-core --lib passkey_crypto
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Preserve validated lockfile on security branch
+        shell: pwsh
+        run: |
+          git diff --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src-tauri/Cargo.lock
+          git diff --cached --quiet
+          if ($LASTEXITCODE -eq 0) { exit 0 }
+          git commit -m 'Resolve patched Rust crypto dependencies on security branch'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git push origin HEAD:security/crypto-bigint-0.7.10
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
