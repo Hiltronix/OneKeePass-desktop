@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: crypto-bigint-security-migration
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   resolve-and-validate:
@@ -24,6 +24,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Set up Visual Studio MSVC compiler
         uses: ilammy/msvc-dev-cmd@v1
+      - name: Cache Windows Rust build dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: crypto-bigint-ssh-migration
 
       - name: Prepare pinned SSH agent protocol vendor
         shell: pwsh
@@ -122,11 +127,8 @@ jobs:
             cargo update --manifest-path src-tauri/Cargo.toml --package crypto-bigint@0.7.10 --precise 0.7.10
           }
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          # A green job must mean the old, vulnerable branch is absent.
-          # Show all target/feature ancestors before checking the lockfile.
-          # Cargo tree without --target all may hide platform-specific deps.
-          cargo tree --manifest-path src-tauri/Cargo.toml --target all --invert crypto-bigint@0.5.5
-          Write-Host 'Completed all-target ancestor inspection'
+          # A green job must mean the old vulnerable branch is entirely
+          # absent from Cargo.lock, including optional/transitive dependencies.
           $ResolvedLock = Get-Content src-tauri/Cargo.lock -Raw
           if ($ResolvedLock -match '(?s)\[\[package\]\]\s+name = "crypto-bigint"\s+version = "0\.5\.5"') {
             throw 'crypto-bigint 0.5.5 remains in Cargo.lock'
