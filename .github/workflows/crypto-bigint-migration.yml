@@ -83,11 +83,21 @@ jobs:
             # OPTIONAL signing features; OneKeePass uses only its wire types.
             $cargo = $cargo.Replace(', path = "../ssh-cipher"', '')
             $cargo = $cargo.Replace(', path = "../ssh-encoding"', '')
-            foreach ($curve in @('p256', 'p384', 'p521')) {
-              $cargo = $cargo -replace "(?m)^$curve = \\{[^\r\n]*\\}\r?\n", ''
-              $cargo = $cargo -replace "(?m)^    \"$curve\\?/std\",?\r?\n", ''
-              $cargo = $cargo -replace "(?m)^$curve = \\[\\\"dep:$curve\\\", \\\"ecdsa\\\"\\]\r?\n", ''
+            # Filter only the feature/dependency lines using exact prefixes;
+            # source crypto APIs remain untouched.
+            $removePrefixes = @(
+              'p256 = {', 'p384 = {', 'p521 = {',
+              'p256 = ["dep:', 'p384 = ["dep:', 'p521 = ["dep:',
+              '    "p256?/std",', '    "p384?/std",', '    "p521?/std",'
+            )
+            $filtered = foreach ($line in ($cargo -split "\r?\n")) {
+              $skip = $false
+              foreach ($prefix in $removePrefixes) {
+                if ($line.StartsWith($prefix)) { $skip = $true; break }
+              }
+              if (-not $skip) { $line }
             }
+            $cargo = ($filtered -join "`n") + "`n"
             $cargo = $cargo.Replace(
               'crypto = ["ed25519", "p256", "p384", "p521", "rsa"]',
               'crypto = ["ed25519", "rsa"]'
