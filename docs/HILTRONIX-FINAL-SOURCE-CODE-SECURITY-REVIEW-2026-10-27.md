@@ -52,3 +52,10 @@
 7. Verify Windows clipboard timeout and inspect the Windows Clipboard History setting separately. Ensure intentionally saved passwords do not remain in history if history is enabled.
 
 **Review classification:** The outstanding *source-review* work is complete. The overall **security audit is NOT closed** until the design decisions about renderer filesystem access and advisories are resolved or explicitly accepted, and the listed Windows runtime observations are recorded.
+
+
+### Quick-XML review resolution — revision 2026-10-27-18
+
+The original assessment must distinguish XML code actually linked to OneKeePass from lockfile entries for other platforms. The pinned `onekeepass-core` has used `quick-xml 0.41.0` for normal encrypted KDBX XML parsing/writing, in-memory locking serialization and version 2 XML keyfile handling; this is active functionality. The older `quick-xml 0.39.4` instance was used **only** by Linux `wayland-scanner 0.31.10`, via Tauri clipboard manager → arboard → wl-clipboard-rs → wayland-client, for generating Wayland protocol APIs. It was not the core KDBX XML parser, nor a Windows runtime dependency.
+
+Remediation updates the locked `wayland-scanner` to patch release **0.31.11** (published with `quick-xml ^0.41`), reusing the existing `quick-xml 0.41.0`, and removes the redundant old lock entry. Core source code is unchanged; the core already handles the 0.40+ `read_text` API change. Cargo `--locked` resolution, Windows CI, the post-change RustSec scan and Linux compatibility must be verified. RSA/crypto-bigint not touched in this revision.
