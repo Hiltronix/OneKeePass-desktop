@@ -22,6 +22,8 @@ jobs:
         with:
           persist-credentials: true
       - uses: dtolnay/rust-toolchain@stable
+      - name: Set up Visual Studio MSVC compiler
+        uses: ilammy/msvc-dev-cmd@v1
 
       - name: Resolve patched dependency graph
         shell: pwsh
@@ -29,7 +31,12 @@ jobs:
           $ErrorActionPreference = 'Stop'
           cargo update --manifest-path src-tauri/Cargo.toml --package onekeepass-core
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          cargo update --manifest-path src-tauri/Cargo.toml --package crypto-bigint@0.7.6 --precise 0.7.10
+          $LockText = Get-Content src-tauri/Cargo.lock -Raw
+          if ($LockText -match '(?s)\[\[package\]\]\s+name = "crypto-bigint"\s+version = "0\.7\.6"') {
+            cargo update --manifest-path src-tauri/Cargo.toml --package crypto-bigint@0.7.6 --precise 0.7.10
+          } else {
+            cargo update --manifest-path src-tauri/Cargo.toml --package crypto-bigint@0.7.10 --precise 0.7.10
+          }
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo tree --manifest-path src-tauri/Cargo.toml --invert crypto-bigint@0.5.5
           if ($LASTEXITCODE -ne 0) { Write-Host 'Old crypto-bigint family removed' }
