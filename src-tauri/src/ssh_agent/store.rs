@@ -482,6 +482,93 @@ mod tests {
     use super::parse_lifetime;
     use std::time::Duration;
 
+    // Real OpenSSH keys exercise format compatibility and the agent's
+    // algorithm-specific signing. No keys are checked into the repository:
+    // ssh-keygen creates disposable test fixtures under the runner temp dir.
+    #[cfg(windows)]
+    #[test]
+    fn openssh_key_signing_roundtrips_all_supported_algorithms() {
+        use super::{StoredIdentity, SSH_AGENT_RSA_SHA2_512};
+        use onekeepass_core::db_service::ssh_agent::SshAgentKeySource;
+        use std::fs;
+        use std::process::Command;
+
+        let message = b"OneKeePass isolated SSH agent cryptography test";
+        let cases = [
+            ("ed25519", None),
+            ("ecdsa", Some("256")),
+            ("ecdsa", Some("384")),
+            ("ecdsa", Some("521")),
+            ("rsa", Some("2048")),
+        ];
+
+        for (key_type, bits) in cases {
+            let stem = std::env::temp_dir().join(format!(
+                "onekeepass-ssh-test-{}",
+                uuid::Uuid::new_v4()
+            ));
+            let filename = stem.to_string_lossy().into_owned();
+            let mut cmd = Command::new("ssh-keygen");
+            cmd.args(["-q", "-t", key_type, "-N", "", "-C", "temporary-test", "-f", &filename]);
+            if let Some(b) = bits {
+                cmd.args(["-b", b]);
+            }
+            let result = cmd.output().expect("ssh-keygen must be available on Windows CI");
+            assert!(
+                result.status.success(),
+                "ssh-keygen {key_type} {bits:?} failed: {}",
+                String::from_utf8_lossy(&result.stderr)
+            );
+
+            let private_key_pem = fs::read_to_string(&stem).unwrap();
+            let public_key = fs::read_to_string(format!("{filename}.pub")).unwrap();
+            let _ = fs::remove_file(&stem);
+            let _ = fs::remove_file(format!("{filename}.pub"));
+
+            let source = SshAgentKeySource {
+                db_key: "unit-test-db".into(),
+                entry_uuid: uuid::Uuid::new_v4(),
+                title: format!("test {key_type} {bits:?}"),
+                public_key: Some(public_key),
+                private_key_pem,
+                passphrase: None,
+                require_confirmation: false,
+                agent_lifetime: None,
+            };
+
+            // The stable agent protocol parser must load the exact key
+            // produced by ssh-keygen, including its public-key identity.
+            let id = StoredIdentity::from_source(&source)
+                .unwrap_or_else(|e| panic!("{key_type} {bits:?} parse failed: {e}"));
+            assert!(!id.public_key_data.fingerprint(ssh_key::HashAlg::Sha256).to_string().is_empty());
+
+            // Verify signatures using the independent modern SSH key verifier;
+            // this checks ECDSA r/s framing as well as actual cryptographic validity.
+            let modern = ssh_key_ppk::PrivateKey::from_openssh(source.private_key_pem.trim())
+                .expect("modern SSH parser must accept generated keys");
+            let verify_signature = |sig: &ssh_key::Signature| {
+                let hash = match sig.algorithm() {
+                    ssh_key::Algorithm::Rsa { hash: Some(ssh_key::HashAlg::Sha512) } => {
+                        ssh_key_ppk::Algorithm::Rsa { hash: Some(ssh_key_ppk::HashAlg::Sha512) }
+                    }
+                    ssh_key::Algorithm::Rsa { .. } => {
+                        ssh_key_ppk::Algorithm::Rsa { hash: Some(ssh_key_ppk::HashAlg::Sha256) }
+                    }
+                    _ => modern.algorithm(),
+                };
+                let modern_sig = ssh_key_ppk::Signature::new(hash, sig.as_bytes().to_vec())
+                    .expect("signature must have valid SSH wire encoding");
+                signature3::Verifier::verify(modern.public_key(), message, &modern_sig)
+                    .unwrap_or_else(|e| panic!("{key_type} {bits:?} signature rejected: {e}"));
+            };
+            verify_signature(&id.sign(message, 0).expect("agent signing must succeed"));
+            if key_type == "rsa" {
+                verify_signature(&id.sign(message, SSH_AGENT_RSA_SHA2_512)
+                    .expect("RSA SHA2-512 agent signing must succeed"));
+            }
+        }
+    }
+
     #[test]
     fn lifetime_seconds() {
         // The duration picker stores whole seconds.
