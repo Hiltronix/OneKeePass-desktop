@@ -25,6 +25,36 @@ jobs:
       - name: Set up Visual Studio MSVC compiler
         uses: ilammy/msvc-dev-cmd@v1
 
+      - name: Prepare pinned SSH agent protocol vendor
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $vendor = 'src-tauri/vendor/ssh-agent-lib'
+          if (-not (Test-Path "$vendor/Cargo.toml" -PathType Leaf)) {
+            # Clone the verified v0.6.0 upstream commit, not a moving branch.
+            git clone --depth 1 --branch v0.6.0 https://github.com/wiktor-k/ssh-agent-lib.git $vendor
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            $sha = (git -C $vendor rev-parse HEAD).Trim()
+            if ($sha -ne '59707d160628ca4804a7e21cf4e8a5cdc59f2e02') {
+              throw "Unexpected ssh-agent-lib upstream revision: $sha"
+            }
+            # Keep original licenses and Rust source; do not import .git,
+            # upstream fuzzing, CI, examples or test assets into our tree.
+            Get-ChildItem $vendor -Force | Where-Object {
+              $_.Name -notin @('src', 'Cargo.toml', 'LICENSE-APACHE', 'LICENSE-MIT', 'README.md')
+            } | Remove-Item -Recurse -Force
+            $cargo = Get-Content "$vendor/Cargo.toml" -Raw
+            $original = 'ssh-key = { version = "0.6", features = ["crypto", "alloc"] }'
+            $updated = 'ssh-key = { version = "0.6.7", features = ["ed25519", "rsa", "ecdsa", "encryption", "getrandom", "alloc"] }'
+            if (-not $cargo.Contains($original)) { throw "Unexpected upstream ssh-key feature declaration" }
+            $cargo = $cargo.Replace($original, $updated)
+            $cargo = $cargo.Replace('members = [".", "fuzz"]', 'members = ["."]')
+            $cargo = $cargo.Replace('ssh-key = { version = "0.6.7", features = ["p256", "rsa"] }', 'ssh-key = { version = "0.6.7", features = ["ed25519", "rsa"] }')
+            $cargo = $cargo.Replace("p256 = { version = ""0.13.2"" }`n", '')
+            Set-Content -Path "$vendor/Cargo.toml" -Value $cargo -NoNewline
+            Set-Content -Path "$vendor/README-HILTRONIX.md" -Value 'Vendored from wiktor-k/ssh-agent-lib v0.6.0 (MIT OR Apache-2.0). Only older ECC feature selection was disabled; ECDSA signing is moved to the existing modern RustCrypto SSH key library. Preserve both upstream licenses.'
+          }
+
       - name: Resolve patched dependency graph
         shell: pwsh
         run: |
@@ -38,8 +68,10 @@ jobs:
             cargo update --manifest-path src-tauri/Cargo.toml --package crypto-bigint@0.7.10 --precise 0.7.10
           }
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          # A green job must mean the old, vulnerable branch is absent.
           cargo tree --manifest-path src-tauri/Cargo.toml --invert crypto-bigint@0.5.5
-          if ($LASTEXITCODE -ne 0) { Write-Host 'Old crypto-bigint family removed' }
+          if ($LASTEXITCODE -eq 0) { throw 'crypto-bigint 0.5.5 remains in the desktop graph' }
+          Write-Host 'PASS: crypto-bigint 0.5.5 was removed'
           cargo tree --manifest-path src-tauri/Cargo.toml --invert crypto-bigint@0.7.10
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo metadata --manifest-path src-tauri/Cargo.toml --locked --format-version 1 > $null
@@ -67,6 +99,13 @@ jobs:
           cargo test --manifest-path core-security-tests/Cargo.toml --lib passkey_crypto
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Test SSH Agent
+        shell: pwsh
+        run: |
+          $env:TAURI_CONFIG = Get-Content src-tauri/tauri.windows-offline.conf.json -Raw
+          cargo test --manifest-path src-tauri/Cargo.toml --locked --bin onekeepass-frontend ssh_agent::store::tests
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Preserve validated lockfile on security branch
         shell: pwsh
         run: |
@@ -74,7 +113,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add src-tauri/Cargo.lock
+          git add src-tauri/Cargo.lock src-tauri/vendor/ssh-agent-lib
           git diff --cached --quiet
           if ($LASTEXITCODE -eq 0) { exit 0 }
           git commit -m 'Resolve patched Rust crypto dependencies on security branch'
