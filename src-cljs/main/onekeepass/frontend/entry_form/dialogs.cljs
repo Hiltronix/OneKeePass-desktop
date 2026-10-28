@@ -426,6 +426,24 @@
    {:dialog-show dialog-show}])
 
 
+(defn entry-delete-confirm-dialog [{:keys [dialog-show entry-title]}]
+  [mui-dialog {:open (boolean dialog-show)
+               :on-close (fn [_e reason]
+                           (when (= reason "escapeKeyDown")
+                             (form-events/entry-delete-confirm-close)))
+               :on-click #(.stopPropagation ^js/Event %)}
+   [mui-dialog-title "Delete entry"]
+   [mui-dialog-content {:dividers true}
+    [mui-stack {:spacing 1}
+     [mui-typography {:sx {:font-weight 600}} (or entry-title "")]
+     [mui-typography "Are you sure?"]]]
+   [mui-dialog-actions
+    [mui-button {:on-click form-events/entry-delete-confirm-close}
+     (t/lstr-bl 'cancel)]
+    [mui-button {:on-click form-events/entry-delete-confirm-ok}
+     (t/lstr-bl 'ok)]]])
+
+
 ;;;;;;;;;;;;;;;;;;;;;;; Clone Entry Options ;;;;;;;;;;;;;;;;;;;;;;
 
 (defn clone-entry-options-dialog [{:keys [dialog-show
