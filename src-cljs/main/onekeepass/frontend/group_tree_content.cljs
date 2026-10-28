@@ -170,6 +170,9 @@
            selected-target-db (target-db-option unlocked-dbs effective-target-key)]
 
        [mui-dialog {:open dialog-show
+                    :on-close (fn [_e reason]
+                                (when (= reason "escapeKeyDown")
+                                  (gd-events/move-group-or-entry-dialog-close)))
                     :dir (t/dir)
                     :on-click #(.stopPropagation ^js/Event %)
                     :sx {"& .MuiPaper-root" {:width "60%"}}}
