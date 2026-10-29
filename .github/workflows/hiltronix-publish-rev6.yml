@@ -1,0 +1,123 @@
+name: Publish OneKeePass 0.27.0 Hiltronix Rev 6
+
+on:
+  push:
+    branches: ['fix/desktop-dialogs-v6-stage']
+    paths:
+      - '.github/workflows/hiltronix-publish-rev6.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish:
+    if: github.repository == 'Hiltronix/OneKeePass-desktop' && github.ref == 'refs/heads/fix/desktop-dialogs-v6-stage'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: v0.27.0-hiltronix-2026-10-28-6
+      SOURCE_COMMIT: 794efd78e700bd955b48f92563161aef49350def
+      ARTIFACT_ID: 12871279127
+      EXPECTED_SHA256: 6fed7e0a0789348a56651ff98a53fd22ee864692ccb0bd2e47e54288a4db7d09
+      ASSET: OneKeePass_0.27.0_Hiltronix_2026-10-28-6_Windows_x64_Portable.zip
+
+    steps:
+      - name: Check for existing release
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::Release already exists; refusing to replace a published build."
+            exit 1
+          fi
+
+      - name: Retrieve the exact successful Windows portable CI archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          curl --fail --location --retry 3 --silent --show-error \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" \
+            --output "release/$ASSET"
+          test -s "release/$ASSET"
+
+      - name: Verify archive integrity, portable mode and source provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "$EXPECTED_SHA256  release/$ASSET" | sha256sum --check --status
+          entries=$(unzip -Z -1 "release/$ASSET")
+          grep -Fxq 'OneKeePass_0.27.0_Windows_x64_Portable/OneKeePass.exe' <<< "$entries"
+          grep -Fxq 'OneKeePass_0.27.0_Windows_x64_Portable/.portable' <<< "$entries"
+          grep -Fxq 'OneKeePass_0.27.0_Windows_x64_Portable/README.txt' <<< "$entries"
+          grep -Eq '^OneKeePass_0\.27\.0_Windows_x64_Portable/_up_/resources/public/translations/' <<< "$entries"
+          if grep -Eq '/onekeepass-proxy\.exe$' <<< "$entries"; then
+            echo "::error::Browser proxy executable must not be included."
+            exit 1
+          fi
+          gh api "/repos/$GITHUB_REPOSITORY/actions/runs/40813601225" \
+            --jq '.head_sha' | grep -Fxq "$SOURCE_COMMIT"
+          printf '%s  %s\n' "$EXPECTED_SHA256" "$ASSET" > release/SHA256SUMS.txt
+          echo "CI artifact SHA-256 and source commit verified."
+
+      - name: Write release notes
+        shell: bash
+        run: |
+          cat > release/RELEASE_NOTES.md <<'EOF'
+          ## OneKeePass Desktop 0.27.0 — Hiltronix Windows x64 portable (Rev 6)
+
+          **Unofficial customized version** of [OneKeePass Desktop](https://github.com/OneKeePass/desktop), deliberately retained at **0.27.0** to maintain a stable, locally controlled Windows password manager while reducing unnecessary network exposure, updating selected libraries, fixing functional issues, and improving security.
+
+          ### Improvements and fixes
+
+          - Windows portable distribution with application data stored locally in `onekeepass-data` beside the executable; WebView2/Tauri temporary directories redirected under `temp`, with cleanup on normal exit and on startup after interrupted shutdown.
+          - Reduced background network access, disabled app update checks and WebView2 background networking/component updates, local-only custom icons, and no bundled browser native-messaging proxy.
+          - Removed unused plaintext XML export renderer commands and Windows Hello code paths; tightened Tauri capabilities, file reads, attachment authorization and named-pipe/agent security.
+          - Compatible Windows SSH Agent support for OpenSSH and Pageant clients; selected Rust cryptographic dependency updates, including `crypto-bigint 0.7.10`.
+          - Always-visible search with Ctrl+F, Ctrl+S Apply in entry editing, Escape-to-Cancel for dialogs, fixed Clone Entry cursor handling, and corrected Delete Entry confirmation regressions.
+          - Hiltronix date-based revision display and portable Windows security audit workflow.
+
+          ### Build provenance
+
+          - **Base application version:** `0.27.0`
+          - **Hiltronix revision:** `2026-10-28-6`
+          - **Build commit (verified source):** `794efd78e700bd955b48f92563161aef49350def`
+          - **Successful Windows x64 portable build:** https://github.com/Hiltronix/OneKeePass-desktop/actions/runs/40813601225
+          - **SHA-256 of attached portable ZIP:** `6fed7e0a0789348a56651ff98a53fd22ee864692ccb0bd2e47e54288a4db7d09`
+
+          The release asset is the **exact ZIP artifact** from the successful CI workflow; it contains a top-level portable folder, `OneKeePass.exe`, the hidden `.portable` marker and bundled resources. Extract the whole directory to a writable path and run `OneKeePass.exe`. The Microsoft Edge WebView2 Runtime is required. No installer is necessary.
+
+          **Testing:** The owner confirmed Revision 6 works on Windows, including sign-in, editing, SSH agent behavior with KiTTY and WinSCP, clone entry text insertion, and dialog fixes. This is not an independent security certification or a claim that all networking or vulnerabilities have been eliminated.
+
+          **Upstream acknowledgment:** All original authorship belongs to the [OneKeePass maintainers and contributors](https://github.com/OneKeePass/desktop). Hiltronix is credited solely for these modifications. Original licenses and attribution remain in force. This build is not official OneKeePass software.
+
+          See the [customization notice and project README](https://github.com/Hiltronix/OneKeePass-desktop) for a more detailed change list.
+          EOF
+
+      - name: Publish release from exact tested source commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" \
+            "release/$ASSET" \
+            "release/SHA256SUMS.txt" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$SOURCE_COMMIT" \
+            --title "OneKeePass Desktop 0.27.0 — Hiltronix 2026-10-28-6" \
+            --notes-file release/RELEASE_NOTES.md
+
+      - name: Verify published release and both assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets \
+            --jq '.assets[].name' | tee /tmp/release-assets.txt
+          grep -Fxq "$ASSET" /tmp/release-assets.txt
+          grep -Fxq SHA256SUMS.txt /tmp/release-assets.txt
