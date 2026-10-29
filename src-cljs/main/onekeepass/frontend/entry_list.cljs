@@ -10,6 +10,7 @@
             [onekeepass.frontend.db-icons :refer [entry-icon render-entry-icon]]
             [onekeepass.frontend.dnd :as dnd]
             [onekeepass.frontend.entry-form-ex :as entry-form-ex]
+            [onekeepass.frontend.entry-delete-confirmation :as delete-confirm]
             [onekeepass.frontend.events.clone-entry-to-other-db :as clone-events]
             [onekeepass.frontend.events.common :as cmn-events]
             [onekeepass.frontend.events.entry-form-dialogs :as dlg-events]
@@ -157,7 +158,7 @@
                 (ctx-menu/action-item
                  {:id "entry-delete"
                   :text (t/lstr-ml 'delete)
-                  :action #(form-events/entry-delete-start uuid)})
+                  :action #(delete-confirm/request-delete uuid (:title item))})
                 (ctx-menu/separator-item)
                 (ctx-menu/action-item
                  {:id "entry-favorites"
@@ -459,7 +460,8 @@
                                  #_(if (nil? entry-type-uuid)
                                      UUID_OF_ENTRY_TYPE_LOGIN
                                      entry-type-uuid))}
-         (tr-bl addEntry)]]]]]))
+         (tr-bl addEntry)]]]]]
+     [delete-confirm/delete-confirmation-dialog]]))
 
 (defn entry-list-content []
   [:f> fn-entry-list-content])
