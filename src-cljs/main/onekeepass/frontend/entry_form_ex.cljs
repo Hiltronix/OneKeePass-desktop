@@ -37,6 +37,7 @@
                                                              text-area-field
                                                              text-field]]
    [onekeepass.frontend.entry-form.menus :as menus]
+   [onekeepass.frontend.entry-delete-confirmation :as delete-confirm]
    [onekeepass.frontend.events.clone-entry-to-other-db :as clone-events]
    [onekeepass.frontend.events.common :as ce]
    [onekeepass.frontend.events.entry-form-dialogs :as dlg-events]
@@ -118,7 +119,7 @@
                 (ctx-menu/action-item
                  {:id "entry-form-delete"
                   :text (lstr-ml 'delete)
-                  :action #(form-events/entry-delete-start entry-uuid)})
+                  :action #(delete-confirm/request-delete entry-uuid)})
                 (ctx-menu/separator-item)
                 (ctx-menu/action-item
                  {:id "entry-form-favorite"
@@ -1005,16 +1006,24 @@
   "The 'Add Section' link along with the popper that is shown to enter a new section name"
   []
   (let [;;anchor-el (r/atom nil)
-        comp-ref (atom nil)]
+        comp-ref (atom nil)
+        section-dialog-data @(form-events/section-name-dialog-data)]
     [:<>
      [mui-box {;; This box's ref is used as achoring element for the Popper
                :ref (fn [e]
                       ;;(println "ref is called " e)
-                      (reset! comp-ref e))}
+                      (reset! comp-ref e))
+               ;; Focus can remain on the opener while the Popper appears.
+               :on-key-down (fn [e]
+                              (when (and (:dialog-show section-dialog-data)
+                                         (= (.-key e) "Escape"))
+                                (.preventDefault e)
+                                (.stopPropagation e)
+                                (form-events/section-name-dialog-update :dialog-show false)))}
       [footer-link-button {:tooltip-title (lstr-l 'addSectionAndFields)
                            :label (tr-l "addSection")
                            :on-click #(form-events/open-section-name-dialog @comp-ref)}]]
-     [add-modify-section-popper @(form-events/section-name-dialog-data)]
+     [add-modify-section-popper section-dialog-data]
      #_[add-section-popper anchor-el]]))
 
 ;; Used in the custom entry type form where the 'on demand' section links are not applicable
