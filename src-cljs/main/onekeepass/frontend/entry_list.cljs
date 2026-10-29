@@ -460,7 +460,7 @@
                                  #_(if (nil? entry-type-uuid)
                                      UUID_OF_ENTRY_TYPE_LOGIN
                                      entry-type-uuid))}
-         (tr-bl addEntry)]]]]]
+         (tr-bl addEntry)]]]]
      [delete-confirm/delete-confirmation-dialog]]))
 
 (defn entry-list-content []
