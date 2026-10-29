@@ -168,6 +168,7 @@
                                  (tr-l "newsectionName") (tr-l "modifySectionName"))]]
     [mui-stack [mui-dialog-content {:dividers true}
                 [m/text-field {:label (tr-l "sectionName")
+                               :autoFocus true
                                :value section-name
                                :error (boolean (seq error-fields))
                                :helperText (get error-fields :section-name)
@@ -434,7 +435,11 @@
                                           keep-histories
                                           link-by-reference
                                           _error-fields]}]
-  [mui-dialog {:open dialog-show :on-click #(.stopPropagation ^js/Event %)
+  [mui-dialog {:open dialog-show
+               :on-close (fn [_e reason]
+                           (when (= reason "escapeKeyDown")
+                             (dlg-events/clone-entry-options-dialog-close)))
+               :on-click #(.stopPropagation ^js/Event %)
                   ;; This will set the Paper width in all child components 
                   ;; and is equivalent to :classes {:paper "pwd-dlg-root"}
                :sx {"& .MuiPaper-root" {:width "80%"}}}
