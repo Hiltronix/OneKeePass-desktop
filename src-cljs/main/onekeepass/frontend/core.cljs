@@ -280,7 +280,7 @@
        [ctx-menu/context-menu-root]
        ;; Mount the confirmation only when requested, outside entry rendering.
        (when (:dialog-show delete-confirmation)
-         [entry-dialogs/entry-delete-confirm-dialog delete-confirmation])]])))
+         [entry-dialogs/entry-delete-confirm-dialog delete-confirmation])])))
 
 (defn header-bar []
   [:div  [:f> tool-bar/top-bar]])
