@@ -4,6 +4,7 @@
    [onekeepass.frontend.common-components :as cc]
    [onekeepass.frontend.constants :as const]
    [onekeepass.frontend.events.clone-entry-to-other-db :as clone-events]
+   [onekeepass.frontend.entry-delete-confirmation :as delete-confirm]
    [onekeepass.frontend.events.common :as cmn-events]
    [onekeepass.frontend.events.entry-form-dialogs :as dlg-events]
    [onekeepass.frontend.events.entry-form-ex :as form-events]
@@ -129,7 +130,7 @@
 
      [mui-menu-item {:divider true
                      :sx {:padding-left "1px"}
-                     :on-click (menu-action anchor-el form-events/entry-delete-start entry-uuid)}
+                     :on-click (menu-action anchor-el delete-confirm/request-delete entry-uuid)}
       [mui-list-item-text {:inset true} (lstr-ml 'delete)]]
 
      (if favorites?
@@ -215,7 +216,7 @@
                            {:callback-fn #(dlg-events/clone-entry-options-dialog-show entry-uuid)})
                           (tauri-events/enable-app-menu
                            const/MENU_ID_DELETE_ENTRY edit-menu?
-                           {:callback-fn #(form-events/entry-delete-start entry-uuid)})
+                           {:callback-fn #(delete-confirm/request-delete entry-uuid)})
                           ;; Copy TOTP is enabled only when the entry has an otp field set up
                           (tauri-events/enable-app-menu const/MENU_ID_COPY_TOTP (and edit-menu? otp-available?))
                           ;; cleanup fn is returned which is called when this component unmounts
