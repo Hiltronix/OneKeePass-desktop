@@ -1177,7 +1177,6 @@
        [custom-field-delete-confirm @(form-events/field-delete-dialog-data)]
        [custom-section-delete-confirm @(form-events/section-delete-dialog-data)]
        [clone-entry-options-dialog @(dlg-events/clone-entry-options-dialog-data)]
-       [dlg/entry-delete-confirm-dialog @(form-events/entry-delete-confirm-data)]
 
        ;; Used to move one parent group to another (based on the generic dialogs concept)
        [gt-content/move-group-or-entry-dialog]
