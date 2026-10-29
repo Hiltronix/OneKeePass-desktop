@@ -1,3 +1,34 @@
+# OneKeePass 0.27.0 — Hiltronix Windows Desktop Edition
+
+> **Unofficial customized fork.** This edition is intentionally based on **OneKeePass Desktop 0.27.0** rather than tracking newer upstream releases. The goal is a locally controlled Windows portable password manager: reduce unnecessary network exposure, update selected libraries, correct functional problems, make minor usability improvements, and harden security. It is not an official OneKeePass release or an automatic-updating distribution.
+
+## Purpose and key modifications
+
+- **Version pinning:** Keeps the OneKeePass 0.27.0 application version while assigning a separate date-based **Hiltronix Revision** in *About*. The final tested Windows x64 portable build is **2026-10-28-6**.
+- **Offline-first Windows build:** Disables the update-check mechanism, blocks background WebView2 networking/component updates/sync, restricts WebView2 through a loopback-only nonresponsive proxy, and omits the browser native-messaging proxy executable from the portable package. These measures reduce network exposure; they do **not** constitute a firewall or guarantee that every possible network operation is blocked.
+- **Local-only icon loading:** Prevents fetching custom icons/favicons from remote URLs; local icon files remain supported.
+- **Reduced exposed functions:** Removed unused renderer-callable plaintext XML export functions and wrappers, narrowed Tauri permissions, and removed Windows Hello biometric/PIN code paths from the Windows build.
+- **Portable filesystem isolation:** Keeps application data in `onekeepass-data` beside `OneKeePass.exe`; redirects working files, temporary attachment copies, Tauri caches, and the WebView2 profile under the portable `temp` directory. Cleans temporary contents on normal exit and stale contents on next launch while retaining the folder itself.
+- **SSH-agent support and hardening:** Windows OpenSSH named-pipe and Pageant compatibility, more restrictive named-pipe permissions and Windows ownership checks, and signing support tested with external SSH clients. The SSH agent remains an *explicit* local feature, not an external network service.
+- **Rust dependency maintenance:** Updated selected cryptographic and XML dependencies, including the **crypto-bigint 0.7.10** migration in the custom source; pinned and tested SSH-agent-related library compatibility.
+- **Hardening of file/attachment operations:** Added size-bounded local file reads and stricter authorization for temporary attachment-opening paths, including revocation when the database is locked.
+- **Security diagnostics:** Added a Windows security-audit helper and a dependency advisory workflow; audits also checked outbound TCP activity and Windows named-pipe access controls. These checks are not a blanket security certification.
+- **Search usability:** Added an always-visible toolbar search field with **Ctrl+F**, removed the old saved-input suggestions, and adjusted the search dropdown height.
+- **Editing shortcuts and dialogs:** **Ctrl+S** applies changes while editing an entry; added **Escape** cancellation to several dialogs; repaired the Clone Entry text-cursor behavior, and corrected entry-delete confirmation UI regressions.
+- **Windows desktop polish:** Preserves main-window geometry, fixes application/taskbar identity, and improves the *About* and *Help* experience.
+
+## Custom build and original credits
+
+**Windows x64 portable download:** [Hiltronix GitHub Releases](https://github.com/Hiltronix/OneKeePass-desktop/releases). Extract the ZIP and run `OneKeePass.exe`. Preserve the hidden `.portable` file and `_up_` resources. This build requires the Microsoft Edge WebView2 Runtime.
+
+**Final tested source:** [revision `2026-10-28-6`, commit `794efd78e700bd955b48f92563161aef49350def`](https://github.com/Hiltronix/OneKeePass-desktop/commit/794efd78e700bd955b48f92563161aef49350def) on [`fix/desktop-dialogs-v6-stage`](https://github.com/Hiltronix/OneKeePass-desktop/tree/fix/desktop-dialogs-v6-stage). The **default `main` branch is not the final Rev 6 Windows build**; choose the custom branch to work from the tested source.
+
+**Original project:** [OneKeePass Desktop](https://github.com/OneKeePass/desktop), by its original developers and contributors. All original authorship, licensing, notices and source-code attribution are preserved. Hiltronix is credited only for the modifications in this fork. The original README below describes the upstream cross-platform application and may include features intentionally changed or disabled in this Windows-specific edition.
+
+---
+
+## Original OneKeePass README
+
 <h1 align="center">
   <img src="./src-tauri/icons/128x128.png" alt="OneKeePass" width="128" />
   <br>
