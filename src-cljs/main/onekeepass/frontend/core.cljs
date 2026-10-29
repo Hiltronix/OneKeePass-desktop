@@ -5,9 +5,11 @@
             [onekeepass.frontend.dnd :as dnd]
             [onekeepass.frontend.entry-category :as ec]
             [onekeepass.frontend.entry-form-ex :as eform-ex]
+            [onekeepass.frontend.entry-form.dialogs :as entry-dialogs]
             [onekeepass.frontend.entry-list :as el]
             [onekeepass.frontend.events.common :as cmn-events]
             [onekeepass.frontend.events.entry-list :as el-events]
+            [onekeepass.frontend.events.entry-form-ex :as form-events]
             [onekeepass.frontend.events.move-group-entry :as move-events]
             ;; Just to load events defined in this ns
             [onekeepass.frontend.events.auto-open]
@@ -237,7 +239,8 @@
 (defn main-content []
   (fn []
     (let [content-to-show @(cmn-events/content-to-show)
-          db-list @(cmn-events/opened-db-list)]
+          db-list @(cmn-events/opened-db-list)
+          delete-confirmation @(form-events/entry-delete-confirm-data)]
       (m/react-use-effect
        (fn []
          (ctx-menu/install-global-text-context-menu!)
@@ -274,7 +277,10 @@
          :else
          [:f> group-entry-content])
 
-       [ctx-menu/context-menu-root]])))
+       [ctx-menu/context-menu-root]
+       ;; Mount the confirmation only when requested, outside entry rendering.
+       (when (:dialog-show delete-confirmation)
+         [entry-dialogs/entry-delete-confirm-dialog delete-confirmation])]])))
 
 (defn header-bar []
   [:div  [:f> tool-bar/top-bar]])
